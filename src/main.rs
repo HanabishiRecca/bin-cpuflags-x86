@@ -2,7 +2,7 @@ mod error;
 
 use crate::error::{AppError, R};
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions};
-use object::{self, Architecture, File, Object, ObjectSection};
+use object::{Architecture, File, Object, ObjectSection};
 use std::{env, fs, process::ExitCode};
 
 fn read_bin(path: &str) -> R<()> {
@@ -15,7 +15,7 @@ fn read_bin(path: &str) -> R<()> {
 
     matches!(
         architecture,
-        Architecture::X86_64 | Architecture::X86_64_X32
+        Architecture::X86_64 | Architecture::X86_64_X32 | Architecture::I386
     )
     .then_some(())
     .ok_or(AppError::WrongArch)?;
