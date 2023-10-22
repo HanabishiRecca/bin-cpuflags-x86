@@ -1,0 +1,12 @@
+[package]
+name = "bin-cpuflags-x86"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced-x86 = { version = "1.20", default-features = false, features = [
+    "std",
+    "decoder",
+    "instr_info",
+] }
+object = "0.32"
