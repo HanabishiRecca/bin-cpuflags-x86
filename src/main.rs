@@ -2,12 +2,12 @@ mod error;
 
 use crate::error::{AppError, R};
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions};
-use object::{Architecture, File, Object, ObjectSection};
+use object::{Architecture, File, Object, ObjectSection, ReadCache};
 use std::{env, fs, process::ExitCode};
 
 fn read_bin(path: &str) -> R<()> {
-    let data = fs::read(path)?;
-    let file = File::parse(data.as_slice())?;
+    let data = ReadCache::new(fs::File::open(path)?);
+    let file = File::parse(&data)?;
     println!("Format: {:?}", file.format());
 
     let architecture = file.architecture();
