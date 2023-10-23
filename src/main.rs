@@ -2,10 +2,21 @@ mod error;
 
 use crate::error::{AppError, R};
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions};
-use object::{Architecture, File as ObjFile, Object, ObjectSection, ReadCache, SectionKind};
-use std::{env, fs::File, process::ExitCode};
+use object::{
+    Architecture, File as ObjFile, Object, ObjectSection, ReadCache, ReadRef, SectionKind,
+};
+use std::{
+    env,
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+    process::ExitCode,
+};
 
-fn read_section(data: &[u8], bitness: u32, found: &mut [bool]) {
+/// Should be bigger or equal to `IcedConstants::CPUID_FEATURE_ENUM_COUNT`.
+/// The crate does not export it unfortunatelty.
+const CF_COUNT: usize = 256;
+
+fn decode(data: &[u8], bitness: u32, found: &mut [bool]) {
     let decoder = Decoder::new(bitness, data, DecoderOptions::NO_INVALID_CHECK);
 
     for instruction in decoder {
@@ -23,12 +34,8 @@ macro_rules! check {
     };
 }
 
-fn read_bin(path: &str) -> R<()> {
-    let fh = File::open(path)?;
-    check!(!fh.metadata()?.file_type().is_dir(), AppError::WrongTarget);
-
-    let data = ReadCache::new(fh);
-    let file = ObjFile::parse(&data)?;
+fn read_header<'a>(data: impl ReadRef<'a>) -> R<(u32, Vec<(u64, u64)>)> {
+    let file = ObjFile::parse(data)?;
     println!("Format: {:?}", file.format());
 
     let architecture = file.architecture();
@@ -47,19 +54,39 @@ fn read_bin(path: &str) -> R<()> {
         _ => 32,
     };
 
-    let mut found = vec![false; CpuidFeature::values().max().unwrap_or_default() as usize];
-    let mut count = 0;
+    let sections = file
+        .sections()
+        .filter_map(|s| match s.kind() {
+            SectionKind::Text => s.file_range(),
+            _ => None,
+        })
+        .collect();
 
-    for section in file.sections() {
-        if section.kind() != SectionKind::Text {
-            continue;
-        }
-        read_section(section.data()?, bitness, &mut found);
-        count += 1;
+    Ok((bitness, sections))
+}
+
+fn read_file(path: &str) -> R<[bool; CF_COUNT]> {
+    let mut fh = File::open(path)?;
+    check!(!fh.metadata()?.file_type().is_dir(), AppError::WrongTarget);
+
+    let (bitness, sections) = { read_header(&ReadCache::new(&fh))? };
+    check!(!sections.is_empty(), AppError::NoText);
+
+    let mut found = [false; CF_COUNT];
+    let mut buffer = vec![0; sections.iter().map(|(_, size)| *size).max().unwrap_or(0) as usize];
+
+    for (offset, size) in sections {
+        let data = &mut buffer[..size as usize];
+        fh.seek(SeekFrom::Start(offset))?;
+        fh.read_exact(data)?;
+        decode(data, bitness, &mut found);
     }
 
-    check!(count > 0, AppError::NoText);
-    println!("Detected features:");
+    Ok(found)
+}
+
+fn print_features(found: &[bool]) {
+    print!("Features: ");
 
     for feature in CpuidFeature::values() {
         if let Some(true) = found.get(feature as usize) {
@@ -68,7 +95,6 @@ fn read_bin(path: &str) -> R<()> {
     }
 
     println!();
-    Ok(())
 }
 
 fn print_help() {
@@ -80,11 +106,11 @@ fn print_help() {
 }
 
 fn run_app() -> R<()> {
-    if let Some(path) = env::args().nth(1) {
-        return read_bin(&path);
+    match env::args().nth(1) {
+        Some(path) => print_features(&read_file(&path)?),
+        _ => print_help(),
     }
 
-    print_help();
     Ok(())
 }
 
