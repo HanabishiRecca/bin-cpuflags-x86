@@ -24,7 +24,10 @@ macro_rules! check {
 }
 
 fn read_bin(path: &str) -> R<()> {
-    let data = ReadCache::new(File::open(path)?);
+    let fh = File::open(path)?;
+    check!(!fh.metadata()?.file_type().is_dir(), AppError::WrongTarget);
+
+    let data = ReadCache::new(fh);
     let file = ObjFile::parse(&data)?;
     println!("Format: {:?}", file.format());
 
