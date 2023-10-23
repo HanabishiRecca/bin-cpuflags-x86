@@ -2,46 +2,60 @@ mod error;
 
 use crate::error::{AppError, R};
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions};
-use object::{Architecture, File, Object, ObjectSection, ReadCache};
-use std::{env, fs, process::ExitCode};
+use object::{Architecture, File as ObjFile, Object, ObjectSection, ReadCache, SectionKind};
+use std::{env, fs::File, process::ExitCode};
 
-fn read_bin(path: &str) -> R<()> {
-    let data = ReadCache::new(fs::File::open(path)?);
-    let file = File::parse(&data)?;
-    println!("Format: {:?}", file.format());
+fn read_section(data: &[u8], bitness: u32, found: &mut [bool]) {
+    let decoder = Decoder::new(bitness, data, DecoderOptions::NO_INVALID_CHECK);
 
-    let architecture = file.architecture();
-    println!("Architecture: {architecture:?}");
-
-    matches!(
-        architecture,
-        Architecture::X86_64 | Architecture::X86_64_X32 | Architecture::I386
-    )
-    .then_some(())
-    .ok_or(AppError::WrongArch)?;
-
-    let mut decoder = Decoder::with_ip(
-        match architecture {
-            Architecture::X86_64 => 64,
-            _ => 32,
-        },
-        file.section_by_name(".text")
-            .ok_or(AppError::NoText)?
-            .data()?,
-        0,
-        DecoderOptions::NO_INVALID_CHECK,
-    );
-
-    let mut found = vec![false; CpuidFeature::values().max().unwrap_or_default() as usize];
-
-    for instruction in decoder.iter() {
+    for instruction in decoder {
         for &feature in instruction.cpuid_features() {
             if let Some(flag) = found.get_mut(feature as usize) {
                 *flag = true;
             }
         }
     }
+}
 
+macro_rules! check {
+    ($b: expr, $e: expr $(,)?) => {
+        ($b).then_some(()).ok_or($e)?
+    };
+}
+
+fn read_bin(path: &str) -> R<()> {
+    let data = ReadCache::new(File::open(path)?);
+    let file = ObjFile::parse(&data)?;
+    println!("Format: {:?}", file.format());
+
+    let architecture = file.architecture();
+    println!("Architecture: {architecture:?}");
+
+    check!(
+        matches!(
+            architecture,
+            Architecture::X86_64 | Architecture::X86_64_X32 | Architecture::I386
+        ),
+        AppError::WrongArch,
+    );
+
+    let bitness = match architecture {
+        Architecture::X86_64 => 64,
+        _ => 32,
+    };
+
+    let mut found = vec![false; CpuidFeature::values().max().unwrap_or_default() as usize];
+    let mut count = 0;
+
+    for section in file.sections() {
+        if section.kind() != SectionKind::Text {
+            continue;
+        }
+        read_section(section.data()?, bitness, &mut found);
+        count += 1;
+    }
+
+    check!(count > 0, AppError::NoText);
     println!("Detected features:");
 
     for feature in CpuidFeature::values() {

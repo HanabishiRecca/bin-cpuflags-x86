@@ -15,7 +15,7 @@ impl fmt::Display for AppError {
         use AppError::*;
         match self {
             WrongArch => write!(f, "Unsupported architecture"),
-            NoText => write!(f, "No '.text' section found"),
+            NoText => write!(f, "No 'text' sections found in the file"),
         }
     }
 }
