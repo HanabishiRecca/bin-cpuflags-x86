@@ -116,7 +116,7 @@ fn run_app() -> R<()> {
 
 fn main() -> ExitCode {
     run_app().err().map_or(ExitCode::SUCCESS, |e| {
-        println!("Error: {e}");
+        eprintln!("Error: {e}");
         ExitCode::FAILURE
     })
 }
