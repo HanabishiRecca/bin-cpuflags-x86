@@ -8,6 +8,10 @@ A small CLI tool to detect CPU flags (instruction sets) of X86 binaries.
 
 ## Options
 
+**`-d`, `--details`**
+
+Enable detailed report about instructions used (slower).
+
 **`-v`, `--verbose`**
 
 Enable more verbose output.
