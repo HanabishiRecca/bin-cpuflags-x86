@@ -1,2 +1,10 @@
-A small tool to detect CPU flags (instruction sets) of X86 binaries.
-Usage: {BIN_NAME} <path_to_binary_file>
+{PKG} {VER}
+A small CLI tool to detect CPU flags (instruction sets) of X86 binaries.
+
+Usage: {BIN} [<option>...] <file>
+
+Options:
+  -v, --verbose    enable more verbose output
+  -q, --quiet      print only the result data
+  -h, --help       display this message and exit
+      --           stop reading any options and treat the next argument as a file path

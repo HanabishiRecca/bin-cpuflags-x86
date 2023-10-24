@@ -1,6 +1,4 @@
-mod error;
-
-use crate::error::{AppError, R};
+use cli::Config;
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions};
 use object::{
     Architecture, File as ObjFile, Object, ObjectSection, ReadCache, ReadRef, SectionKind,
@@ -10,6 +8,14 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
     process::ExitCode,
+};
+
+mod cli;
+mod error;
+
+use crate::{
+    cli::OutputMode,
+    error::{AppError, R},
 };
 
 /// Should be bigger or equal to `IcedConstants::CPUID_FEATURE_ENUM_COUNT`.
@@ -34,12 +40,14 @@ macro_rules! check {
     };
 }
 
-fn read_header<'a>(data: impl ReadRef<'a>) -> R<(u32, Vec<(u64, u64)>)> {
+fn read_header<'a>(data: impl ReadRef<'a>, output_mode: OutputMode) -> R<(u32, Vec<(u64, u64)>)> {
     let file = ObjFile::parse(data)?;
-    println!("Format: {:?}", file.format());
-
     let architecture = file.architecture();
-    println!("Architecture: {architecture:?}");
+
+    if output_mode > OutputMode::Quiet {
+        println!("Format: {:?}", file.format());
+        println!("Architecture: {architecture:?}");
+    }
 
     check!(
         matches!(
@@ -54,10 +62,24 @@ fn read_header<'a>(data: impl ReadRef<'a>) -> R<(u32, Vec<(u64, u64)>)> {
         _ => 32,
     };
 
+    if output_mode > OutputMode::Normal {
+        println!("Text sections: ");
+    }
+
     let sections = file
         .sections()
         .filter_map(|s| match s.kind() {
-            SectionKind::Text => s.file_range(),
+            SectionKind::Text => {
+                if output_mode > OutputMode::Normal {
+                    println!(
+                        "    {} => 0x{:x}, {} bytes",
+                        s.name().unwrap_or_default(),
+                        s.address(),
+                        s.size()
+                    );
+                }
+                s.file_range()
+            }
             _ => None,
         })
         .collect();
@@ -65,11 +87,15 @@ fn read_header<'a>(data: impl ReadRef<'a>) -> R<(u32, Vec<(u64, u64)>)> {
     Ok((bitness, sections))
 }
 
-fn read_file(path: &str) -> R<[bool; CF_COUNT]> {
+fn read_file(path: &str, output_mode: OutputMode) -> R<[bool; CF_COUNT]> {
+    if output_mode > OutputMode::Normal {
+        println!("Reading '{path}'...");
+    }
+
     let mut fh = File::open(path)?;
     check!(!fh.metadata()?.file_type().is_dir(), AppError::WrongTarget);
 
-    let (bitness, sections) = { read_header(&ReadCache::new(&fh))? };
+    let (bitness, sections) = { read_header(&ReadCache::new(&fh), output_mode)? };
     check!(!sections.is_empty(), AppError::NoText);
 
     let mut found = [false; CF_COUNT];
@@ -85,8 +111,10 @@ fn read_file(path: &str) -> R<[bool; CF_COUNT]> {
     Ok(found)
 }
 
-fn print_features(found: &[bool]) {
-    print!("Features: ");
+fn print_features(found: &[bool], output_mode: OutputMode) {
+    if output_mode > OutputMode::Quiet {
+        print!("Features: ");
+    }
 
     for feature in CpuidFeature::values() {
         if let Some(true) = found.get(feature as usize) {
@@ -94,20 +122,29 @@ fn print_features(found: &[bool]) {
         }
     }
 
-    println!();
+    if output_mode > OutputMode::Quiet {
+        println!();
+    }
 }
 
 fn print_help() {
     let bin = env::current_exe().ok();
     println!(
         include_str!("help.in"),
-        BIN_NAME = (|| bin.as_ref()?.file_name()?.to_str())().unwrap_or(env!("CARGO_BIN_NAME"))
+        PKG = env!("CARGO_PKG_NAME"),
+        VER = env!("CARGO_PKG_VERSION"),
+        BIN = (|| bin.as_ref()?.file_name()?.to_str())().unwrap_or(env!("CARGO_BIN_NAME")),
     );
 }
 
 fn run_app() -> R<()> {
-    match env::args().nth(1) {
-        Some(path) => print_features(&read_file(&path)?),
+    let config = cli::read_args(env::args().skip(1))?;
+
+    match config {
+        Some(Config {
+            file_path: Some(path),
+            output_mode,
+        }) => print_features(&read_file(&path, output_mode)?, output_mode),
         _ => print_help(),
     }
 
