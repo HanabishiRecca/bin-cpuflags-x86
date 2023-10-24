@@ -1,9 +1,10 @@
 use cli::Config;
-use iced_x86::{CpuidFeature, Decoder, DecoderOptions};
+use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Mnemonic};
 use object::{
     Architecture, File as ObjFile, Object, ObjectSection, ReadCache, ReadRef, SectionKind,
 };
 use std::{
+    collections::HashSet,
     env,
     fs::File,
     io::{Read, Seek, SeekFrom},
@@ -22,15 +23,30 @@ use crate::{
 /// The crate does not export it unfortunatelty.
 const CF_COUNT: usize = 256;
 
-fn decode(data: &[u8], bitness: u32, found: &mut [bool]) {
+type Detail = HashSet<Mnemonic>;
+
+fn decode(data: &[u8], bitness: u32, found: &mut [bool], details: Option<&mut [Detail]>) {
     let decoder = Decoder::new(bitness, data, DecoderOptions::NO_INVALID_CHECK);
 
-    for instruction in decoder {
-        for &feature in instruction.cpuid_features() {
-            if let Some(flag) = found.get_mut(feature as usize) {
-                *flag = true;
+    macro_rules! body {
+        ($($d: expr)?) => {
+            for instruction in decoder {
+                for &feature in instruction.cpuid_features() {
+                    let index = feature as usize;
+                    if let Some(flag) = found.get_mut(index) {
+                        *flag = true;
+                        $(if let Some(d) = $d.get_mut(index) {
+                            d.insert(instruction.mnemonic());
+                        })?
+                    }
+                }
             }
-        }
+        };
+    }
+
+    match details {
+        Some(d) => body!(d),
+        _ => body!(),
     }
 }
 
@@ -87,7 +103,11 @@ fn read_header<'a>(data: impl ReadRef<'a>, output_mode: OutputMode) -> R<(u32, V
     Ok((bitness, sections))
 }
 
-fn read_file(path: &str, output_mode: OutputMode) -> R<[bool; CF_COUNT]> {
+fn read_file(
+    path: &str,
+    details: bool,
+    output_mode: OutputMode,
+) -> R<([bool; CF_COUNT], Option<Vec<Detail>>)> {
     if output_mode > OutputMode::Normal {
         println!("Reading '{path}'...");
     }
@@ -99,30 +119,52 @@ fn read_file(path: &str, output_mode: OutputMode) -> R<[bool; CF_COUNT]> {
     check!(!sections.is_empty(), AppError::NoText);
 
     let mut found = [false; CF_COUNT];
+    let mut details = details.then(|| vec![HashSet::new(); CF_COUNT]);
     let mut buffer = vec![0; sections.iter().map(|(_, size)| *size).max().unwrap_or(0) as usize];
 
     for (offset, size) in sections {
         let data = &mut buffer[..size as usize];
         fh.seek(SeekFrom::Start(offset))?;
         fh.read_exact(data)?;
-        decode(data, bitness, &mut found);
+        decode(data, bitness, &mut found, details.as_deref_mut());
     }
 
-    Ok(found)
+    Ok((found, details))
 }
 
-fn print_features(found: &[bool], output_mode: OutputMode) {
+fn print_features(found: &[bool], details: Option<&[Detail]>, output_mode: OutputMode) {
     if output_mode > OutputMode::Quiet {
         print!("Features: ");
-    }
 
-    for feature in CpuidFeature::values() {
-        if let Some(true) = found.get(feature as usize) {
-            print!("{feature:?} ");
+        if details.is_some() {
+            println!();
         }
     }
 
-    if output_mode > OutputMode::Quiet {
+    macro_rules! body {
+        ($($d: expr)?) => {{
+            for feature in CpuidFeature::values() {
+                let index = feature as usize;
+                if let Some(true) = found.get(index) {
+                    print!("{feature:?} ");
+                    $(if let Some(d) = $d.get(index) {
+                        print!(": ");
+                        for m in d {
+                            print!("{m:?} ");
+                        }
+                        println!();
+                    })?
+                }
+            }
+        }};
+    }
+
+    match details {
+        Some(d) => body!(d),
+        _ => body!(),
+    }
+
+    if details.is_none() && output_mode > OutputMode::Quiet {
         println!();
     }
 }
@@ -143,8 +185,12 @@ fn run_app() -> R<()> {
     match config {
         Some(Config {
             file_path: Some(path),
+            details,
             output_mode,
-        }) => print_features(&read_file(&path, output_mode)?, output_mode),
+        }) => {
+            let (found, details) = read_file(&path, details, output_mode)?;
+            print_features(&found, details.as_deref(), output_mode);
+        }
         _ => print_help(),
     }
 

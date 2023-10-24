@@ -12,6 +12,7 @@ pub enum OutputMode {
 
 pub struct Config {
     pub file_path: Option<String>,
+    pub details: bool,
     pub output_mode: OutputMode,
 }
 
@@ -19,6 +20,7 @@ impl Config {
     fn new() -> Self {
         Config {
             file_path: None,
+            details: false,
             output_mode: OutputMode::Normal,
         }
     }
@@ -37,6 +39,7 @@ pub fn read_args(args: impl Iterator<Item = String>) -> R<Option<Config>> {
             continue;
         }
         match arg.as_str().trim() {
+            "-d" | "--details" => config.details = true,
             "-v" | "--verbose" => config.output_mode = OutputMode::Verbose,
             "-q" | "--quiet" => config.output_mode = OutputMode::Quiet,
             "-h" | "--help" => return Ok(None),

@@ -4,6 +4,7 @@ A small CLI tool to detect CPU flags (instruction sets) of X86 binaries.
 Usage: {BIN} [<option>...] <file>
 
 Options:
+  -d, --details    enable detailed report about instructions used (slower)
   -v, --verbose    enable more verbose output
   -q, --quiet      print only the result data
   -h, --help       display this message and exit
