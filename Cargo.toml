@@ -2,6 +2,10 @@
 name = "bin-cpuflags-x86"
 version = "0.1.0"
 edition = "2021"
+description = "A small CLI tool to detect CPU flags (instruction sets) of X86 binaries"
+repository = "https://github.com/HanabishiRecca/bin-cpuflags-x86"
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
 iced-x86 = { version = "1.20", default-features = false, features = [
