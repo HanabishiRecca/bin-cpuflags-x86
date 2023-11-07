@@ -90,8 +90,14 @@ fn print_features(found: &[bool], details: Option<&[Detail]>, output_mode: Outpu
         _ => body!(),
     }
 
-    if details.is_none() && output_mode > OutputMode::Quiet {
-        println!();
+    if output_mode > OutputMode::Quiet {
+        if details.is_none() {
+            println!();
+        }
+
+        if let Some(true) = found.get(CpuidFeature::CPUID as usize) {
+            println!("Warning: CPUID usage detected. The program can switch instruction sets in runtime.")
+        }
     }
 }
 
