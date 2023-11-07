@@ -1,0 +1,124 @@
+name: Build and upload release binaries
+run-name: Build release @ ${{ github.event.release.tag_name }}
+
+on:
+  release:
+    types:
+      - released
+
+env:
+  APP: bin-cpuflags-x86
+  VERSION: ${{ github.event.release.tag_name }}
+  UPLOAD_URL: ${{ github.event.release.upload_url }}
+  RUSTUP_TOOLCHAIN: stable
+  CARGO_BUILD_TARGET_DIR: target
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-linux:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare
+        run: |
+          mkdir ".cargo"
+          cp -pv ".github/workflows/config.toml" -t ".cargo"
+          rustup target add "${CARGO_BUILD_TARGET}"
+          cargo fetch -v --locked
+
+      # - name: Run tests
+      #   run: cargo test -v --frozen
+
+      - name: Build
+        run: cargo build -v --frozen --release
+
+      - name: Upload archive
+        run: |
+          cd "${CARGO_BUILD_TARGET_DIR}/${CARGO_BUILD_TARGET}/release"
+          ARCHIVE="${APP}-${VERSION}-linux.tar.xz"
+          tar -cvJf "${ARCHIVE}" "${APP}"
+          URL="${UPLOAD_URL%'{'*}"
+          curl -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/x-tar" \
+            --fail-with-body --connect-timeout 10 --retry 3 \
+            --data-binary "@${ARCHIVE}" \
+            "${URL}?name=${ARCHIVE}"
+
+  release-windows:
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare
+        run: |
+          New-Item -Name ".cargo" -ItemType "directory"
+          Copy-Item ".github\workflows\config.toml" -Destination ".cargo\"
+          rustup target add "${Env:CARGO_BUILD_TARGET}"
+          cargo fetch -v --locked
+
+      # - name: Run tests
+      #   run: cargo test -v --frozen
+
+      - name: Build
+        run: cargo build -v --frozen --release
+
+      - name: Upload archive
+        run: |
+          cd "${Env:CARGO_BUILD_TARGET_DIR}\${Env:CARGO_BUILD_TARGET}\release"
+          $Archive = "${Env:APP}-${Env:VERSION}-windows.zip"
+          7z a -tzip -mx=9 -sse -ssp -- "${Archive}" "${Env:APP}.exe"
+          $Url = ${Env:UPLOAD_URL} -replace '{.*',''
+          curl -L -X POST `
+            -H "Accept: application/vnd.github+json" `
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+            -H "X-GitHub-Api-Version: 2022-11-28" `
+            -H "Content-Type: application/zip" `
+            --fail-with-body --connect-timeout 10 --retry 3 `
+            --data-binary "@${Archive}" `
+            "${Url}?name=${Archive}"
+
+  release-macos:
+    runs-on: macos-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Prepare
+        run: |
+          mkdir ".cargo"
+          cp -pv ".github/workflows/config.toml" ".cargo/"
+          rustup target add "${CARGO_BUILD_TARGET}"
+          cargo fetch -v --locked
+
+      # - name: Run tests
+      #   run: cargo test -v --frozen
+
+      - name: Build
+        run: cargo build -v --frozen --release
+
+      - name: Upload archive
+        run: |
+          cd "${CARGO_BUILD_TARGET_DIR}/${CARGO_BUILD_TARGET}/release"
+          ARCHIVE="${APP}-${VERSION}-macos.tar.gz"
+          tar -cvzf "${ARCHIVE}" "${APP}"
+          URL="${UPLOAD_URL%'{'*}"
+          curl -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/x-tar" \
+            --fail-with-body --connect-timeout 10 --retry 3 \
+            --data-binary "@${ARCHIVE}" \
+            "${URL}?name=${ARCHIVE}"

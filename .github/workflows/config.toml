@@ -1,0 +1,15 @@
+[registries.crates-io]
+protocol = "sparse"
+
+[profile.release]
+panic = "abort"
+opt-level = 2
+strip = true
+lto = true
+codegen-units = 1
+
+[build]
+rustflags = [
+    "-C", "target-cpu=generic",
+    "-C", "target-feature=+crt-static"
+]
