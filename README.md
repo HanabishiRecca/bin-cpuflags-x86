@@ -28,8 +28,17 @@ Display help message and exit.
 
 Stop reading any options and treat the next argument as a file path.
 
+## Download
+
+You can download prebuilt binaries from [releases](https://github.com/HanabishiRecca/bin-cpuflags-x86/releases) page.
+
 ## Building from the source
 
 Install Rust compiler and run:
 
     $ cargo build --release
+
+## Packages
+
+-   [`bin-cpuflags-x86`](https://aur.archlinux.org/packages/bin-cpuflags-x86)<sup>AUR</sup>
+-   [`bin-cpuflags-x86-bin`](https://aur.archlinux.org/packages/bin-cpuflags-x86-bin)<sup>AUR</sup>
