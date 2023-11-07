@@ -28,5 +28,11 @@ Install Rust compiler and run:
 
 ## Packages
 
--   [`bin-cpuflags-x86`](https://aur.archlinux.org/packages/bin-cpuflags-x86)<sup>AUR</sup>
--   [`bin-cpuflags-x86-bin`](https://aur.archlinux.org/packages/bin-cpuflags-x86-bin)<sup>AUR</sup>
+### crates.io
+
+-   [`bin-cpuflags-x86`](https://crates.io/crates/bin-cpuflags-x86)
+
+### AUR
+
+-   [`bin-cpuflags-x86`](https://aur.archlinux.org/packages/bin-cpuflags-x86)
+-   [`bin-cpuflags-x86-bin`](https://aur.archlinux.org/packages/bin-cpuflags-x86-bin)
