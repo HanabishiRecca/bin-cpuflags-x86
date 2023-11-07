@@ -6,11 +6,15 @@ description = "A small CLI tool to detect CPU flags (instruction sets) of X86 bi
 repository = "https://github.com/HanabishiRecca/bin-cpuflags-x86"
 license = "MIT"
 readme = "README.md"
+categories = ["command-line-utilities", "development-tools", "hardware-support"]
+keywords = ["avx", "cpu", "instruction-set", "sse"]
+exclude = [".github"]
+publish = true
 
-[dependencies]
-iced-x86 = { version = "1.20", default-features = false, features = [
-    "std",
-    "decoder",
-    "instr_info",
-] }
-object = "0.32"
+[dependencies.iced-x86]
+version = "1.20"
+features = ["std", "decoder", "instr_info"]
+default-features = false
+
+[dependencies.object]
+version = "0.32"
