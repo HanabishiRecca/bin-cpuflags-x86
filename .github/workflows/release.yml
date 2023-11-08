@@ -21,7 +21,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Prepare
         run: |
@@ -39,8 +39,8 @@ jobs:
       - name: Upload archive
         run: |
           cd "${CARGO_BUILD_TARGET_DIR}/${CARGO_BUILD_TARGET}/release"
-          ARCHIVE="${APP}-${VERSION}-linux.tar.xz"
-          tar -cvJf "${ARCHIVE}" "${APP}"
+          ARCHIVE="${APP}-${VERSION}-linux-x86_64.tar.xz"
+          tar -I 'xz -9' -cvf "${ARCHIVE}" "${APP}"
           URL="${UPLOAD_URL%'{'*}"
           curl -L -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -57,7 +57,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Prepare
         run: |
@@ -75,7 +75,7 @@ jobs:
       - name: Upload archive
         run: |
           cd "${Env:CARGO_BUILD_TARGET_DIR}\${Env:CARGO_BUILD_TARGET}\release"
-          $Archive = "${Env:APP}-${Env:VERSION}-windows.zip"
+          $Archive = "${Env:APP}-${Env:VERSION}-windows-x64.zip"
           7z a -tzip -mx=9 -sse -ssp -- "${Archive}" "${Env:APP}.exe"
           $Url = ${Env:UPLOAD_URL} -replace '{.*',''
           curl -L -X POST `
@@ -93,7 +93,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-apple-darwin
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Prepare
         run: |
@@ -111,8 +111,8 @@ jobs:
       - name: Upload archive
         run: |
           cd "${CARGO_BUILD_TARGET_DIR}/${CARGO_BUILD_TARGET}/release"
-          ARCHIVE="${APP}-${VERSION}-macos.tar.gz"
-          tar -cvzf "${ARCHIVE}" "${APP}"
+          ARCHIVE="${APP}-${VERSION}-macos-x86_64.tar.gz"
+          GZIP='-9' tar -cvzf "${ARCHIVE}" "${APP}"
           URL="${UPLOAD_URL%'{'*}"
           curl -L -X POST \
             -H "Accept: application/vnd.github+json" \
