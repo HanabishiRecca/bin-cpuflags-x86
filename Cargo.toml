@@ -8,7 +8,7 @@ license = "MIT"
 readme = "README.md"
 categories = ["command-line-utilities", "development-tools", "hardware-support"]
 keywords = ["avx", "cpu", "instruction-set", "sse"]
-exclude = [".github"]
+exclude = [".github", ".gitignore"]
 publish = true
 
 [dependencies.iced-x86]
