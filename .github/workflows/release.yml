@@ -11,7 +11,6 @@ env:
   VERSION: ${{ github.event.release.tag_name }}
   UPLOAD_URL: ${{ github.event.release.upload_url }}
   RUSTUP_TOOLCHAIN: stable
-  CARGO_BUILD_TARGET_DIR: target
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -38,9 +37,9 @@ jobs:
 
       - name: Upload archive
         run: |
-          cd "${CARGO_BUILD_TARGET_DIR}/${CARGO_BUILD_TARGET}/release"
+          cd "target/${CARGO_BUILD_TARGET}/release"
           ARCHIVE="${APP}-${VERSION}-linux-x86_64.tar.xz"
-          tar -I 'xz -9' -cvf "${ARCHIVE}" "${APP}"
+          tar -cv "${APP}" | xz -cz -9e -T1 - > "${ARCHIVE}"
           URL="${UPLOAD_URL%'{'*}"
           curl -L -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -74,7 +73,7 @@ jobs:
 
       - name: Upload archive
         run: |
-          cd "${Env:CARGO_BUILD_TARGET_DIR}\${Env:CARGO_BUILD_TARGET}\release"
+          cd "target\${Env:CARGO_BUILD_TARGET}\release"
           $Archive = "${Env:APP}-${Env:VERSION}-windows-x64.zip"
           7z a -tzip -mx=9 -sse -ssp -- "${Archive}" "${Env:APP}.exe"
           $Url = ${Env:UPLOAD_URL} -replace '{.*',''
@@ -110,9 +109,9 @@ jobs:
 
       - name: Upload archive
         run: |
-          cd "${CARGO_BUILD_TARGET_DIR}/${CARGO_BUILD_TARGET}/release"
-          ARCHIVE="${APP}-${VERSION}-macos-x86_64.tar.gz"
-          GZIP='-9' tar -cvzf "${ARCHIVE}" "${APP}"
+          cd "target/${CARGO_BUILD_TARGET}/release"
+          ARCHIVE="${APP}-${VERSION}-macos-x86_64.tar.xz"
+          bsdtar -cv "${APP}" | xz -cz -9e -T1 - > "${ARCHIVE}"
           URL="${UPLOAD_URL%'{'*}"
           curl -L -X POST \
             -H "Accept: application/vnd.github+json" \
