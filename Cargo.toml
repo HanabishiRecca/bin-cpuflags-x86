@@ -12,9 +12,9 @@ exclude = [".github", ".gitignore"]
 publish = true
 
 [dependencies.iced-x86]
-version = "1.20"
+version = "1.21"
 features = ["std", "decoder", "instr_info"]
 default-features = false
 
 [dependencies.object]
-version = "0.34"
+version = "0.35"
