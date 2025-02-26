@@ -1,61 +1,82 @@
-use object::{self, Architecture, Object, ObjectSection, ReadCache, ReadRef, SectionKind};
-use std::fs;
-
-use crate::{
-    check,
-    cli::OutputMode,
-    error::{AppError, R},
+use crate::types::{Arr, Str};
+use object::{
+    Architecture, BinaryFormat, File, Object, ObjectSection, ReadCache, ReadRef, Result, Section,
+    SectionKind,
 };
 
-type Params = (Vec<(u64, u64)>, u32);
-
-fn read_header<'a>(data: impl ReadRef<'a>, output_mode: OutputMode) -> R<Params> {
-    let file = object::File::parse(data)?;
-    let architecture = file.architecture();
-
-    if output_mode > OutputMode::Quiet {
-        println!("Format: {:?}", file.format());
-        println!("Architecture: {architecture:?}");
-    }
-
-    check!(
-        matches!(
-            architecture,
-            Architecture::X86_64 | Architecture::X86_64_X32 | Architecture::I386
-        ),
-        AppError::WrongArch,
-    );
-
-    if output_mode > OutputMode::Normal {
-        println!("Text sections: ");
-    }
-
-    let sections = file
-        .sections()
-        .filter_map(|s| match s.kind() {
-            SectionKind::Text => {
-                if output_mode > OutputMode::Normal {
-                    println!(
-                        "    {} => 0x{:x}, {} bytes",
-                        s.name().unwrap_or_default(),
-                        s.address(),
-                        s.size()
-                    );
-                }
-                s.file_range()
-            }
-            _ => None,
-        })
-        .collect();
-
-    let bitness = match architecture {
-        Architecture::X86_64 => 64,
-        _ => 32,
-    };
-
-    Ok((sections, bitness))
+pub struct SectionInfo {
+    name: Option<Str>,
+    address: u64,
+    size: u64,
+    range: (u64, u64),
 }
 
-pub fn parse(file: &fs::File, output_mode: OutputMode) -> R<Params> {
-    read_header(&ReadCache::new(file), output_mode)
+impl SectionInfo {
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    pub fn address(&self) -> u64 {
+        self.address
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+
+    pub fn range(&self) -> (u64, u64) {
+        self.range
+    }
+}
+
+pub struct BinaryInfo {
+    format: BinaryFormat,
+    arch: Architecture,
+    sections: Arr<SectionInfo>,
+}
+
+impl BinaryInfo {
+    pub fn format(&self) -> BinaryFormat {
+        self.format
+    }
+
+    pub fn arch(&self) -> Architecture {
+        self.arch
+    }
+
+    pub fn bitness(&self) -> Option<u32> {
+        use Architecture::*;
+        match self.arch {
+            X86_64 => Some(64),
+            X86_64_X32 | I386 => Some(32),
+            _ => None,
+        }
+    }
+
+    pub fn sections(&self) -> &[SectionInfo] {
+        &self.sections
+    }
+}
+
+fn map_section<'a>(section: Section<'a, 'a, impl ReadRef<'a>>) -> Option<SectionInfo> {
+    match section.kind() {
+        SectionKind::Text => section.file_range().map(|range| SectionInfo {
+            name: section.name().ok().map(Str::from),
+            address: section.address(),
+            size: section.size(),
+            range,
+        }),
+        _ => None,
+    }
+}
+
+pub fn parse(file: &std::fs::File) -> Result<BinaryInfo> {
+    let cache = ReadCache::new(file);
+    let binary = File::parse(&cache)?;
+
+    Ok(BinaryInfo {
+        format: binary.format(),
+        arch: binary.architecture(),
+        sections: binary.sections().filter_map(map_section).collect(),
+    })
 }
