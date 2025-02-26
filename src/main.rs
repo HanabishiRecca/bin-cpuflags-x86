@@ -3,13 +3,12 @@ mod cli;
 mod decoder;
 mod types;
 
-use crate::{cli::OutputMode, types::Arr};
-use std::{
-    env,
-    fs::File,
-    io::{Read, Seek, SeekFrom},
-    process::ExitCode,
+use crate::{
+    binary::SectionInfo,
+    cli::OutputMode,
+    decoder::{FeatureInfo, Task},
 };
+use std::{env, fs::File, process::ExitCode};
 
 const DEFAULT_SHOW_DETAILS: bool = false;
 const DEFAULT_OUTPUT_MODE: OutputMode = OutputMode::Normal;
@@ -69,6 +68,35 @@ fn print_help() {
     );
 }
 
+fn print_section(section: &SectionInfo) {
+    println!(
+        "    {} => 0x{:x}, {} bytes",
+        section.name().unwrap_or_default(),
+        section.address(),
+        section.size()
+    );
+}
+
+fn print_feature(feature: &FeatureInfo, details: bool) {
+    if !feature.found() {
+        return;
+    }
+
+    print!("{:?} ", feature.feature());
+
+    if !details {
+        return;
+    }
+
+    print!(": ");
+
+    for d in feature.details() {
+        print!("{d:?} ");
+    }
+
+    println!();
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let Some(config) = cli::read_args(env::args().skip(1))? else {
         print_help();
@@ -85,9 +113,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         println!("Reading '{file_path}'...");
     }
 
-    let mut file = File::open(file_path)?;
+    let file = File::open(file_path)?;
     test!(file.metadata()?.file_type().is_dir(), WrongTarget);
-
     let binary = binary::parse(&file)?;
 
     if output_mode > OutputMode::Quiet {
@@ -100,54 +127,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     if output_mode > OutputMode::Normal {
         println!("Text sections: ");
-
-        for section in sections {
-            println!(
-                "    {} => 0x{:x}, {} bytes",
-                section.name().unwrap_or_default(),
-                section.address(),
-                section.size()
-            );
-        }
+        sections.iter().for_each(print_section);
     }
 
-    let bitness = or!(binary.bitness(), WrongArch);
-    let mut info = decoder::new_infos();
+    let mut task = Task::new(&file, or!(binary.bitness(), WrongArch), show_details);
 
     for section in sections {
-        let (offset, size) = section.range();
-        let mut data = Arr::from(vec![0; size as usize]);
-        file.seek(SeekFrom::Start(offset))?;
-        file.read_exact(&mut data)?;
-        decoder::decode(&data, bitness, &mut info, show_details);
+        task.read(section.range())?;
     }
 
     if output_mode > OutputMode::Quiet {
         println!("Features: ");
     }
 
-    for feature in decoder::features() {
-        let Some(i) = info.get(feature as usize) else {
-            continue;
-        };
-
-        if !i.found() {
-            continue;
-        }
-
-        print!("{feature:?} ");
-
-        if !show_details {
-            continue;
-        }
-
-        print!(": ");
-
-        for d in i.details() {
-            print!("{d:?} ");
-        }
-
-        println!();
+    for feature in task.features() {
+        print_feature(feature, show_details);
     }
 
     if output_mode > OutputMode::Quiet {
@@ -155,7 +149,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!();
         }
 
-        if decoder::has_cpuid(&info) {
+        if task.cpuid() {
             println!("Warning: CPUID usage detected. Features could switch in runtime.")
         }
     }
