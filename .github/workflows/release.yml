@@ -4,7 +4,7 @@ run-name: Build release @ ${{ github.event.release.tag_name }}
 on:
   release:
     types:
-      - released
+      - published
 
 env:
   APP: bin-cpuflags-x86
@@ -27,13 +27,13 @@ jobs:
           mkdir ".cargo"
           cp -pv ".github/workflows/config.toml" -t ".cargo"
           rustup target add "${CARGO_BUILD_TARGET}"
-          cargo fetch -v --locked
+          cargo fetch --locked
 
       # - name: Run tests
-      #   run: cargo test -v --frozen
+      #   run: cargo test --frozen
 
       - name: Build
-        run: cargo build -v --frozen --release
+        run: cargo build --frozen --release
 
       - name: Upload archive
         run: |
@@ -63,13 +63,13 @@ jobs:
           New-Item -Name ".cargo" -ItemType "directory"
           Copy-Item ".github\workflows\config.toml" -Destination ".cargo\"
           rustup target add "${Env:CARGO_BUILD_TARGET}"
-          cargo fetch -v --locked
+          cargo fetch --locked
 
       # - name: Run tests
-      #   run: cargo test -v --frozen
+      #   run: cargo test --frozen
 
       - name: Build
-        run: cargo build -v --frozen --release
+        run: cargo build --frozen --release
 
       - name: Upload archive
         run: |
@@ -99,13 +99,13 @@ jobs:
           mkdir ".cargo"
           cp -pv ".github/workflows/config.toml" ".cargo/"
           rustup target add "${CARGO_BUILD_TARGET}"
-          cargo fetch -v --locked
+          cargo fetch --locked
 
       # - name: Run tests
-      #   run: cargo test -v --frozen
+      #   run: cargo test --frozen
 
       - name: Build
-        run: cargo build -v --frozen --release
+        run: cargo build --frozen --release
 
       - name: Upload archive
         run: |
