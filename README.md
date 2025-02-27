@@ -20,6 +20,8 @@ You can download prebuilt binaries from [releases](https://github.com/HanabishiR
 
 ## Building from the source
 
+**Rust 1.85 or up is required.**
+
 Install Rust compiler and run:
 
     $ cargo build --release
