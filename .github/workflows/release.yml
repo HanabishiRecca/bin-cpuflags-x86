@@ -29,8 +29,8 @@ jobs:
           rustup target add "${CARGO_BUILD_TARGET}"
           cargo fetch --locked
 
-      # - name: Run tests
-      #   run: cargo test --frozen
+      - name: Run tests
+        run: cargo test --frozen
 
       - name: Build
         run: cargo build --frozen --release
@@ -65,8 +65,8 @@ jobs:
           rustup target add "${Env:CARGO_BUILD_TARGET}"
           cargo fetch --locked
 
-      # - name: Run tests
-      #   run: cargo test --frozen
+      - name: Run tests
+        run: cargo test --frozen
 
       - name: Build
         run: cargo build --frozen --release
@@ -101,8 +101,8 @@ jobs:
           rustup target add "${CARGO_BUILD_TARGET}"
           cargo fetch --locked
 
-      # - name: Run tests
-      #   run: cargo test --frozen
+      - name: Run tests
+        run: cargo test --frozen
 
       - name: Build
         run: cargo build --frozen --release
