@@ -1,6 +1,10 @@
+#[cfg(test)]
+mod tests;
+
 use crate::types::Str;
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[cfg_attr(test, derive(Debug))]
 pub enum OutputMode {
     Quiet,
     Normal,
@@ -8,6 +12,7 @@ pub enum OutputMode {
 }
 
 #[derive(Default)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct Config {
     file_path: Option<Str>,
     show_details: Option<bool>,
