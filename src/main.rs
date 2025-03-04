@@ -4,9 +4,9 @@ mod decoder;
 mod types;
 
 use crate::{
-    binary::SectionInfo,
+    binary::Segment,
     cli::OutputMode,
-    decoder::{FeatureInfo, Task},
+    decoder::{Feature, Task},
 };
 use std::{env, fs::File, process::ExitCode};
 
@@ -68,21 +68,21 @@ fn print_help() {
     );
 }
 
-fn print_section(section: &SectionInfo) {
+fn print_section(segment: &Segment) {
     println!(
         "    {} => 0x{:x}, {} bytes",
-        section.name().unwrap_or_default(),
-        section.address(),
-        section.size()
+        segment.name().unwrap_or_default(),
+        segment.offset(),
+        segment.size(),
     );
 }
 
-fn print_feature(feature: &FeatureInfo, details: bool) {
+fn print_feature(feature: &Feature, details: bool) {
     if !feature.found() {
         return;
     }
 
-    print!("{:?} ", feature.feature());
+    print!("{:?} ", feature.id());
 
     if !details {
         return;
@@ -90,8 +90,8 @@ fn print_feature(feature: &FeatureInfo, details: bool) {
 
     print!(": ");
 
-    for d in feature.details() {
-        print!("{d:?} ");
+    for code in feature.details() {
+        print!("{:?} ", code.mnemonic());
     }
 
     println!();
@@ -119,10 +119,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     if output_mode > OutputMode::Quiet {
         println!("Format: {:?}", binary.format());
-        println!("Architecture: {:?}", binary.arch());
+        println!("Architecture: {:?}", binary.architecture());
     }
 
-    let sections = binary.sections();
+    let sections = binary.segments();
     test!(sections.is_empty(), NoText);
 
     if output_mode > OutputMode::Normal {
@@ -132,8 +132,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut task = Task::new(&file, or!(binary.bitness(), WrongArch), show_details);
 
-    for section in sections {
-        task.read(section.range())?;
+    for segment in sections {
+        task.read(segment.offset(), segment.size())?;
     }
 
     if output_mode > OutputMode::Quiet {

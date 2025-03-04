@@ -1,44 +1,54 @@
 use crate::types::Arr;
-use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Mnemonic};
+use iced_x86::{Code, CpuidFeature, Decoder, DecoderOptions};
 use std::{
     collections::HashSet,
     fs::File,
-    io::{Read, Result, Seek, SeekFrom},
+    io::{BufRead, BufReader, Result, Seek, SeekFrom},
 };
 
-pub struct FeatureInfo {
-    feature: CpuidFeature,
+const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
+
+pub struct Feature {
+    id: CpuidFeature,
     found: bool,
-    details: HashSet<Mnemonic>,
+    details: HashSet<Code>,
 }
 
-impl FeatureInfo {
-    pub fn new(feature: CpuidFeature) -> Self {
+impl Feature {
+    pub fn new(id: CpuidFeature) -> Self {
         Self {
-            feature,
+            id,
             found: false,
             details: HashSet::new(),
         }
     }
 
-    pub fn feature(&self) -> CpuidFeature {
-        self.feature
+    pub fn id(&self) -> CpuidFeature {
+        self.id
     }
 
     pub fn found(&self) -> bool {
         self.found
     }
 
-    pub fn details(&self) -> impl Iterator<Item = &Mnemonic> {
+    pub fn details(&self) -> impl Iterator<Item = &Code> {
         self.details.iter()
+    }
+
+    fn mark(&mut self) {
+        self.found = true;
+    }
+
+    fn add(&mut self, code: Code) {
+        self.details.insert(code);
     }
 }
 
 pub struct Task<'a> {
     file: &'a File,
     bitness: u32,
-    features: Arr<FeatureInfo>,
     details: bool,
+    features: Arr<Feature>,
 }
 
 impl<'a> Task<'a> {
@@ -46,40 +56,35 @@ impl<'a> Task<'a> {
         Self {
             file,
             bitness,
-            features: CpuidFeature::values().map(FeatureInfo::new).collect(),
             details,
+            features: CpuidFeature::values().map(Feature::new).collect(),
         }
     }
 
-    pub fn read(&mut self, (offset, size): (u64, u64)) -> Result<()> {
-        let mut data = Arr::from(vec![0; size as usize]);
+    pub fn read(&mut self, offset: u64, size: u64) -> Result<()> {
         self.file.seek(SeekFrom::Start(offset))?;
-        self.file.read_exact(&mut data)?;
-        let decoder = Decoder::new(self.bitness, &data, DecoderOptions::NO_INVALID_CHECK);
+        let mut reader = BufReader::with_capacity(size as usize, self.file);
+        let decoder = Decoder::new(self.bitness, reader.fill_buf()?, OPTIONS);
 
         macro_rules! body {
-            ($($d: expr)?) => {
+            ($($d: expr)?) => {{
                 for instruction in decoder {
-                    for &feature in instruction.cpuid_features() {
-                        let Some(info) = self.features.get_mut(feature as usize) else {
+                    for id in instruction.cpuid_features() {
+                        let Some(feature) = self.features.get_mut(*id as usize) else {
                             continue;
                         };
-                        info.found = true;
-                        $(info.details.insert(instruction.mnemonic());$d)?
+                        feature.mark();
+                        $(feature.add(instruction.code());$d)?
                     }
                 }
-            };
+                Ok(())
+            }};
         }
 
-        match self.details {
-            true => body!({}),
-            _ => body!(),
-        }
-
-        Ok(())
+        if self.details { body!({}) } else { body!() }
     }
 
-    pub fn features(&self) -> &[FeatureInfo] {
+    pub fn features(&self) -> &[Feature] {
         &self.features
     }
 

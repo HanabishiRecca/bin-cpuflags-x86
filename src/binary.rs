@@ -4,79 +4,84 @@ use object::{
     SectionKind,
 };
 
-pub struct SectionInfo {
+pub struct Segment {
     name: Option<Str>,
-    address: u64,
+    offset: u64,
     size: u64,
-    range: (u64, u64),
 }
 
-impl SectionInfo {
+impl Segment {
+    pub fn new(name: Option<Str>, offset: u64, size: u64) -> Self {
+        Self { name, offset, size }
+    }
+
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
 
-    pub fn address(&self) -> u64 {
-        self.address
+    pub fn offset(&self) -> u64 {
+        self.offset
     }
 
     pub fn size(&self) -> u64 {
         self.size
     }
-
-    pub fn range(&self) -> (u64, u64) {
-        self.range
-    }
 }
 
-pub struct BinaryInfo {
+pub struct Binary {
     format: BinaryFormat,
-    arch: Architecture,
-    sections: Arr<SectionInfo>,
+    architecture: Architecture,
+    segments: Arr<Segment>,
 }
 
-impl BinaryInfo {
+impl Binary {
+    pub fn new(format: BinaryFormat, architecture: Architecture, segments: Arr<Segment>) -> Self {
+        Self {
+            format,
+            architecture,
+            segments,
+        }
+    }
+
     pub fn format(&self) -> BinaryFormat {
         self.format
     }
 
-    pub fn arch(&self) -> Architecture {
-        self.arch
+    pub fn architecture(&self) -> Architecture {
+        self.architecture
     }
 
     pub fn bitness(&self) -> Option<u32> {
         use Architecture::*;
-        match self.arch {
+        match self.architecture {
             X86_64 => Some(64),
             X86_64_X32 | I386 => Some(32),
             _ => None,
         }
     }
 
-    pub fn sections(&self) -> &[SectionInfo] {
-        &self.sections
+    pub fn segments(&self) -> &[Segment] {
+        &self.segments
     }
 }
 
-fn map_section<'a>(section: Section<'a, 'a, impl ReadRef<'a>>) -> Option<SectionInfo> {
+fn map_section<'a>(section: Section<'a, 'a, impl ReadRef<'a>>) -> Option<Segment> {
+    use SectionKind::*;
     match section.kind() {
-        SectionKind::Text => section.file_range().map(|range| SectionInfo {
-            name: section.name().ok().map(Str::from),
-            address: section.address(),
-            size: section.size(),
-            range,
-        }),
+        Text => section
+            .file_range()
+            .map(|(offset, size)| Segment::new(section.name().ok().map(Str::from), offset, size)),
         _ => None,
     }
 }
 
-pub fn parse(file: &std::fs::File) -> Result<BinaryInfo> {
+pub fn parse(file: &std::fs::File) -> Result<Binary> {
     let cache = ReadCache::new(file);
     let binary = File::parse(&cache)?;
 
-    Ok(BinaryInfo {
-        format: binary.format(),
-        arch: binary.architecture(),
-        sections: binary.sections().filter_map(map_section).collect(),
-    })
+    Ok(Binary::new(
+        binary.format(),
+        binary.architecture(),
+        binary.sections().filter_map(map_section).collect(),
+    ))
 }
