@@ -18,4 +18,4 @@ features = ["std", "decoder", "instr_info"]
 default-features = false
 
 [dependencies.object]
-version = "0.36"
+version = "0.37"
