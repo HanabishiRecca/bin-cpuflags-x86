@@ -23,7 +23,7 @@ fn args() {
 
     let config = read_args!(args).unwrap().unwrap();
     assert_eq!(config.file_path(), Some(file_path));
-    assert_eq!(config.show_details(), Some(true));
+    assert_eq!(config.decoder_mode(), Some(DecoderMode::Detail));
     assert_eq!(config.output_mode(), Some(OutputMode::Quiet));
 }
 

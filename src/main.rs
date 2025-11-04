@@ -4,13 +4,13 @@ mod decoder;
 mod types;
 
 use crate::{
-    binary::Segment,
-    cli::OutputMode,
-    decoder::{Feature, Task},
+    binary::{Binary, Segment},
+    cli::{DecoderMode, OutputMode},
+    decoder::{FDetail, FSimple, Feature, Task},
 };
-use std::{env, fs::File, process::ExitCode};
+use std::{env, error, fmt, fs::File, process::ExitCode, result};
 
-const DEFAULT_SHOW_DETAILS: bool = false;
+const DEFAULT_DECODER_MODE: DecoderMode = DecoderMode::Simple;
 const DEFAULT_OUTPUT_MODE: OutputMode = OutputMode::Normal;
 
 macro_rules! default {
@@ -29,10 +29,10 @@ enum Error {
     NoText,
 }
 
-impl std::error::Error for Error {}
+impl error::Error for Error {}
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
         match self {
             WrongTarget => write!(f, "Should target a file"),
@@ -41,6 +41,8 @@ impl std::fmt::Display for Error {
         }
     }
 }
+
+type Result<T> = result::Result<T, Box<dyn error::Error>>;
 
 macro_rules! or {
     ($o: expr, $e: expr $(,)?) => {{
@@ -77,45 +79,8 @@ fn print_section(segment: &Segment) {
     );
 }
 
-fn print_feature(feature: &Feature, details: bool) {
-    if !feature.found() {
-        return;
-    }
-
-    print!("{:?} ", feature.id());
-
-    if !details {
-        return;
-    }
-
-    print!(": ");
-
-    for code in feature.details() {
-        print!("{:?} ", code.mnemonic());
-    }
-
-    println!();
-}
-
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(config) = cli::read_args(env::args().skip(1))? else {
-        print_help();
-        return Ok(());
-    };
-    let Some(file_path) = config.file_path() else {
-        print_help();
-        return Ok(());
-    };
-    let show_details = default!(config.show_details(), DEFAULT_SHOW_DETAILS);
-    let output_mode = default!(config.output_mode(), DEFAULT_OUTPUT_MODE);
-
-    if output_mode > OutputMode::Normal {
-        println!("Reading '{file_path}'...");
-    }
-
-    let file = File::open(file_path)?;
-    test!(file.metadata()?.file_type().is_dir(), WrongTarget);
-    let binary = binary::parse(&file)?;
+fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
+    let binary = binary::parse(file)?;
 
     if output_mode > OutputMode::Quiet {
         println!("Format: {:?}", binary.format());
@@ -130,10 +95,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         sections.iter().for_each(print_section);
     }
 
-    let mut task = Task::new(&file, or!(binary.bitness(), WrongArch), show_details);
+    Ok(binary)
+}
 
-    for segment in sections {
-        task.read(segment.offset(), segment.size())?;
+fn decode<T: Feature + fmt::Display>(
+    file: &mut File,
+    binary: &Binary,
+    output_mode: OutputMode,
+) -> Result<()> {
+    let mut task = Task::<T>::new(or!(binary.bitness(), WrongArch));
+
+    for segment in binary.segments() {
+        task.read(file, segment.offset(), segment.size())?;
     }
 
     if output_mode > OutputMode::Quiet {
@@ -141,20 +114,47 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for feature in task.features() {
-        print_feature(feature, show_details);
+        print!("{feature}");
     }
 
     if output_mode > OutputMode::Quiet {
-        if !show_details {
+        if T::need_endln() {
             println!();
         }
 
-        if task.cpuid() {
-            println!("Warning: CPUID usage detected. Features could switch in runtime.")
+        if task.has_cpuid() {
+            println!("Warning: CPUID usage detected. Features could switch in runtime.");
         }
     }
 
     Ok(())
+}
+
+fn run() -> Result<()> {
+    let Some(config) = cli::read_args(env::args().skip(1))? else {
+        print_help();
+        return Ok(());
+    };
+    let Some(file_path) = config.file_path() else {
+        print_help();
+        return Ok(());
+    };
+    let decoder_mode = default!(config.decoder_mode(), DEFAULT_DECODER_MODE);
+    let output_mode = default!(config.output_mode(), DEFAULT_OUTPUT_MODE);
+
+    if output_mode > OutputMode::Normal {
+        println!("Reading '{file_path}'...");
+    }
+
+    let mut file = File::open(file_path)?;
+    test!(file.metadata()?.file_type().is_dir(), WrongTarget);
+    let binary = parse(&file, output_mode)?;
+
+    use DecoderMode::*;
+    match decoder_mode {
+        Simple => decode::<FSimple>(&mut file, &binary, output_mode),
+        Detail => decode::<FDetail>(&mut file, &binary, output_mode),
+    }
 }
 
 fn main() -> ExitCode {

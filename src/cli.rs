@@ -5,6 +5,13 @@ use crate::types::Str;
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 #[cfg_attr(test, derive(Debug))]
+pub enum DecoderMode {
+    Simple,
+    Detail,
+}
+
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[cfg_attr(test, derive(Debug))]
 pub enum OutputMode {
     Quiet,
     Normal,
@@ -15,7 +22,7 @@ pub enum OutputMode {
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct Config {
     file_path: Option<Str>,
-    show_details: Option<bool>,
+    decoder_mode: Option<DecoderMode>,
     output_mode: Option<OutputMode>,
 }
 
@@ -24,8 +31,8 @@ impl Config {
         self.file_path.as_deref()
     }
 
-    pub fn show_details(&self) -> Option<bool> {
-        self.show_details
+    pub fn decoder_mode(&self) -> Option<DecoderMode> {
+        self.decoder_mode
     }
 
     pub fn output_mode(&self) -> Option<OutputMode> {
@@ -83,7 +90,7 @@ pub fn read_args(args: impl Iterator<Item = impl AsRef<str>>) -> Result<Option<C
         }
         match arg {
             "-d" | "--details" => {
-                config.show_details = Some(true);
+                config.decoder_mode = Some(DecoderMode::Detail);
             }
             "-v" | "--verbose" => {
                 config.output_mode = Some(OutputMode::Verbose);
