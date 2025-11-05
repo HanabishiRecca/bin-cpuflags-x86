@@ -3,7 +3,6 @@ mod strings;
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction};
 use std::{
-    collections::HashSet,
     fmt,
     fs::File,
     io::{BufRead, BufReader, Result, Seek, SeekFrom},
@@ -49,19 +48,22 @@ impl fmt::Display for FSimple {
 
 pub struct FDetail {
     id: CpuidFeature,
-    mnemonics: HashSet<usize>,
+    mnemonics: Vec<usize>,
 }
 
 impl Feature for FDetail {
     fn new(id: CpuidFeature) -> Self {
         Self {
             id,
-            mnemonics: HashSet::new(),
+            mnemonics: Vec::new(),
         }
     }
 
     fn add(&mut self, instruction: Instruction) {
-        self.mnemonics.insert(instruction.mnemonic() as usize);
+        let mnemonic = instruction.mnemonic() as usize;
+        if !self.mnemonics.contains(&mnemonic) {
+            self.mnemonics.push(mnemonic);
+        }
     }
 
     fn found(&self) -> bool {
