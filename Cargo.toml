@@ -19,3 +19,5 @@ default-features = false
 
 [dependencies.object]
 version = "0.37"
+features = ["std", "read_core", "elf", "macho", "pe"]
+default-features = false
