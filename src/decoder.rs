@@ -1,5 +1,7 @@
+mod strings;
+
 use crate::types::Arr;
-use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction, Mnemonic};
+use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction};
 use std::{
     collections::HashSet,
     fmt,
@@ -47,7 +49,7 @@ impl fmt::Display for FSimple {
 
 pub struct FDetail {
     id: CpuidFeature,
-    mnemonics: HashSet<Mnemonic>,
+    mnemonics: HashSet<usize>,
 }
 
 impl Feature for FDetail {
@@ -59,7 +61,7 @@ impl Feature for FDetail {
     }
 
     fn add(&mut self, instruction: Instruction) {
-        self.mnemonics.insert(instruction.mnemonic());
+        self.mnemonics.insert(instruction.mnemonic() as usize);
     }
 
     fn found(&self) -> bool {
@@ -76,7 +78,7 @@ impl fmt::Display for FDetail {
         write!(f, "{:?} : ", self.id)?;
 
         for mnemonic in &self.mnemonics {
-            write!(f, "{:?} ", mnemonic)?;
+            write!(f, "{} ", strings::MNEMONIC[*mnemonic])?;
         }
 
         writeln!(f)
