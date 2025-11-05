@@ -3,6 +3,7 @@ mod strings;
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction};
 use std::{
+    cmp::Ordering,
     fmt,
     fs::File,
     io::{BufRead, BufReader, Result, Seek, SeekFrom},
@@ -13,6 +14,7 @@ const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
 pub trait Feature {
     fn new(id: CpuidFeature) -> Self;
     fn add(&mut self, instruction: Instruction);
+    fn finish(&mut self);
     fn found(&self) -> bool;
     fn need_endln() -> bool;
 }
@@ -30,6 +32,8 @@ impl Feature for FSimple {
     fn add(&mut self, _: Instruction) {
         self.found = true;
     }
+
+    fn finish(&mut self) {}
 
     fn found(&self) -> bool {
         self.found
@@ -51,6 +55,16 @@ pub struct FDetail {
     mnemonics: Vec<usize>,
 }
 
+impl FDetail {
+    fn mnemonic_str_ord(a: &usize, b: &usize) -> Ordering {
+        strings::MNEMONIC[*a].cmp(strings::MNEMONIC[*b])
+    }
+
+    fn sort(&mut self) {
+        self.mnemonics.sort_unstable_by(Self::mnemonic_str_ord);
+    }
+}
+
 impl Feature for FDetail {
     fn new(id: CpuidFeature) -> Self {
         Self {
@@ -64,6 +78,10 @@ impl Feature for FDetail {
         if !self.mnemonics.contains(&mnemonic) {
             self.mnemonics.push(mnemonic);
         }
+    }
+
+    fn finish(&mut self) {
+        self.sort();
     }
 
     fn found(&self) -> bool {
@@ -122,6 +140,12 @@ impl<T: Feature> Task<T> {
         }
 
         Ok(())
+    }
+
+    pub fn finish(&mut self) {
+        for feature in &mut self.features {
+            feature.finish();
+        }
     }
 
     pub fn features(&self) -> &[T] {

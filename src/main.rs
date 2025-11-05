@@ -109,6 +109,8 @@ fn decode<T: Feature + fmt::Display>(
         task.read(file, segment.offset(), segment.size())?;
     }
 
+    task.finish();
+
     if output_mode > OutputMode::Quiet {
         println!("Features: ");
     }
