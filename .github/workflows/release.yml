@@ -20,7 +20,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-unknown-linux-musl
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Prepare
         run: |
@@ -56,7 +56,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Prepare
         run: |
@@ -92,7 +92,7 @@ jobs:
       CARGO_BUILD_TARGET: x86_64-apple-darwin
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Prepare
         run: |
