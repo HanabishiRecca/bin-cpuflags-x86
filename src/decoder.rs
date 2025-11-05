@@ -1,5 +1,5 @@
 use crate::types::Arr;
-use iced_x86::{Code, CpuidFeature, Decoder, DecoderOptions};
+use iced_x86::{Code, CpuidFeature, Decoder, DecoderOptions, Instruction};
 use std::{
     collections::HashSet,
     fmt,
@@ -95,20 +95,26 @@ impl<T: Feature> Task<T> {
             features: CpuidFeature::values().map(T::new).collect(),
         }
     }
-}
 
-impl<T: Feature> Task<T> {
+    fn add(&mut self, instruction: Instruction) {
+        if instruction.is_invalid() {
+            return;
+        }
+
+        for id in instruction.cpuid_features() {
+            if let Some(feature) = self.features.get_mut(*id as usize) {
+                feature.add(instruction.code());
+            }
+        }
+    }
+
     pub fn read(&mut self, file: &mut File, offset: u64, size: u64) -> Result<()> {
         file.seek(SeekFrom::Start(offset))?;
         let mut reader = BufReader::with_capacity(size as usize, file);
         let decoder = Decoder::new(self.bitness, reader.fill_buf()?, OPTIONS);
 
         for instruction in decoder {
-            for id in instruction.cpuid_features() {
-                if let Some(feature) = self.features.get_mut(*id as usize) {
-                    feature.add(instruction.code());
-                }
-            }
+            self.add(instruction);
         }
 
         Ok(())
