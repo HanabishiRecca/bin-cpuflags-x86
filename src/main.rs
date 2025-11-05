@@ -114,7 +114,9 @@ fn decode<T: Feature + fmt::Display>(
     }
 
     for feature in task.features() {
-        print!("{feature}");
+        if feature.found() {
+            print!("{feature}");
+        }
     }
 
     if output_mode > OutputMode::Quiet {
