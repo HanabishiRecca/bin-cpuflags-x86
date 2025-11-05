@@ -12,6 +12,9 @@ keywords = ["avx", "cpu", "instruction-set", "sse"]
 exclude = [".github", ".gitignore"]
 publish = true
 
+[profile.release]
+panic = "abort"
+
 [dependencies.iced-x86]
 version = "1.21"
 features = ["std", "decoder", "instr_info"]
