@@ -3,7 +3,7 @@ mod tests;
 
 use crate::types::Str;
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
 pub enum DecoderMode {
     Simple,
