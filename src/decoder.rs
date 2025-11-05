@@ -1,5 +1,5 @@
 use crate::types::Arr;
-use iced_x86::{Code, CpuidFeature, Decoder, DecoderOptions, Instruction};
+use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction, Mnemonic};
 use std::{
     collections::HashSet,
     fmt,
@@ -11,7 +11,7 @@ const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
 
 pub trait Feature {
     fn new(id: CpuidFeature) -> Self;
-    fn add(&mut self, code: Code);
+    fn add(&mut self, instruction: Instruction);
     fn found(&self) -> bool;
     fn need_endln() -> bool;
 }
@@ -26,7 +26,7 @@ impl Feature for FSimple {
         Self { id, found: false }
     }
 
-    fn add(&mut self, _: Code) {
+    fn add(&mut self, _: Instruction) {
         self.found = true;
     }
 
@@ -47,23 +47,23 @@ impl fmt::Display for FSimple {
 
 pub struct FDetail {
     id: CpuidFeature,
-    details: HashSet<Code>,
+    mnemonics: HashSet<Mnemonic>,
 }
 
 impl Feature for FDetail {
     fn new(id: CpuidFeature) -> Self {
         Self {
             id,
-            details: HashSet::new(),
+            mnemonics: HashSet::new(),
         }
     }
 
-    fn add(&mut self, code: Code) {
-        self.details.insert(code);
+    fn add(&mut self, instruction: Instruction) {
+        self.mnemonics.insert(instruction.mnemonic());
     }
 
     fn found(&self) -> bool {
-        !self.details.is_empty()
+        !self.mnemonics.is_empty()
     }
 
     fn need_endln() -> bool {
@@ -75,8 +75,8 @@ impl fmt::Display for FDetail {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} : ", self.id)?;
 
-        for code in &self.details {
-            write!(f, "{:?} ", code.mnemonic())?;
+        for mnemonic in &self.mnemonics {
+            write!(f, "{:?} ", mnemonic)?;
         }
 
         writeln!(f)
@@ -103,7 +103,7 @@ impl<T: Feature> Task<T> {
 
         for id in instruction.cpuid_features() {
             if let Some(feature) = self.features.get_mut(*id as usize) {
-                feature.add(instruction.code());
+                feature.add(instruction);
             }
         }
     }
