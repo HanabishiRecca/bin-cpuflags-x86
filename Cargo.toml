@@ -14,6 +14,9 @@ publish = true
 
 [profile.release]
 panic = "abort"
+opt-level = 2
+lto = true
+codegen-units = 1
 
 [dependencies.iced-x86]
 version = "1.21"
