@@ -36,3 +36,7 @@ Install Rust compiler and run:
 
 -   [`bin-cpuflags-x86`](https://aur.archlinux.org/packages/bin-cpuflags-x86)
 -   [`bin-cpuflags-x86-bin`](https://aur.archlinux.org/packages/bin-cpuflags-x86-bin)
+
+### CachyOS
+
+-   [`bin-cpuflags-x86`](https://packages.cachyos.org/package/cachyos/x86_64/bin-cpuflags-x86)
