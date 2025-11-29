@@ -11,6 +11,7 @@ use crate::{
     types::Arr,
 };
 use std::{
+    cmp::Reverse,
     env, error, fmt,
     fs::File,
     io::{self, Write},
@@ -119,6 +120,23 @@ fn print_simple(features: Arr<FSimple>) -> io::Result<()> {
     writeln!(stdout)
 }
 
+fn print_stat(mut features: Arr<FSimple>) -> io::Result<()> {
+    let total: usize = features.iter().map(FSimple::count).sum();
+    features.sort_unstable_by_key(|f| Reverse(f.count()));
+
+    let mut stdout = io::stdout().lock();
+    let features = features.into_iter().map(FSimple::result);
+
+    for (id, count) in features {
+        if count > 0 {
+            let ratio = (count as f64 / total as f64) * 100.0;
+            writeln!(stdout, "{id:?} : {count} ({ratio:.2}%)",)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     let features = features.into_iter().map(FDetail::result);
@@ -184,6 +202,7 @@ fn run() -> Result<()> {
     use DecoderMode::*;
     let has_cpuid = match decoder_mode {
         Simple => decode::<FSimple>(&mut file, &binary, print_simple)?,
+        Stat => decode::<FSimple>(&mut file, &binary, print_stat)?,
         Detail => decode::<FDetail>(&mut file, &binary, print_detail)?,
     };
 

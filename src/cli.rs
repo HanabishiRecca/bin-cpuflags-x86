@@ -7,6 +7,7 @@ use crate::types::Str;
 #[cfg_attr(test, derive(Debug))]
 pub enum DecoderMode {
     Simple,
+    Stat,
     Detail,
 }
 
@@ -89,6 +90,9 @@ pub fn read_args(args: impl Iterator<Item = impl AsRef<str>>) -> Result<Option<C
             continue;
         }
         match arg {
+            "-s" | "--stats" => {
+                config.decoder_mode = Some(DecoderMode::Stat);
+            }
             "-d" | "--details" => {
                 config.decoder_mode = Some(DecoderMode::Detail);
             }

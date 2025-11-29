@@ -22,6 +22,10 @@ impl FSimple {
     pub fn result(self) -> (CpuidFeature, usize) {
         (self.id, self.count)
     }
+
+    pub fn count(&self) -> usize {
+        self.count
+    }
 }
 
 impl Feature for FSimple {
