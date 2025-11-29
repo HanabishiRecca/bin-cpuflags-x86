@@ -1,10 +1,6 @@
-mod strings;
-
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction};
 use std::{
-    cmp::Ordering,
-    fmt,
     fs::File,
     io::{BufRead, BufReader, Result, Seek, SeekFrom},
 };
@@ -14,14 +10,18 @@ const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
 pub trait Feature {
     fn new(id: CpuidFeature) -> Self;
     fn add(&mut self, instruction: Instruction);
-    fn finish(&mut self);
     fn found(&self) -> bool;
-    fn need_endln() -> bool;
 }
 
 pub struct FSimple {
     id: CpuidFeature,
     found: bool,
+}
+
+impl FSimple {
+    pub fn result(self) -> (CpuidFeature, bool) {
+        (self.id, self.found)
+    }
 }
 
 impl Feature for FSimple {
@@ -33,20 +33,8 @@ impl Feature for FSimple {
         self.found = true;
     }
 
-    fn finish(&mut self) {}
-
     fn found(&self) -> bool {
         self.found
-    }
-
-    fn need_endln() -> bool {
-        true
-    }
-}
-
-impl fmt::Display for FSimple {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?} ", self.id)
     }
 }
 
@@ -56,12 +44,8 @@ pub struct FDetail {
 }
 
 impl FDetail {
-    fn mnemonic_str_ord(a: &usize, b: &usize) -> Ordering {
-        strings::MNEMONIC[*a].cmp(strings::MNEMONIC[*b])
-    }
-
-    fn sort(&mut self) {
-        self.mnemonics.sort_unstable_by(Self::mnemonic_str_ord);
+    pub fn result(self) -> (CpuidFeature, Vec<usize>) {
+        (self.id, self.mnemonics)
     }
 }
 
@@ -80,28 +64,8 @@ impl Feature for FDetail {
         }
     }
 
-    fn finish(&mut self) {
-        self.sort();
-    }
-
     fn found(&self) -> bool {
         !self.mnemonics.is_empty()
-    }
-
-    fn need_endln() -> bool {
-        false
-    }
-}
-
-impl fmt::Display for FDetail {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?} : ", self.id)?;
-
-        for mnemonic in &self.mnemonics {
-            write!(f, "{} ", strings::MNEMONIC[*mnemonic])?;
-        }
-
-        writeln!(f)
     }
 }
 
@@ -142,20 +106,13 @@ impl<T: Feature> Task<T> {
         Ok(())
     }
 
-    pub fn finish(&mut self) {
-        for feature in &mut self.features {
-            feature.finish();
-        }
-    }
-
-    pub fn features(&self) -> &[T] {
-        &self.features
-    }
-
-    pub fn has_cpuid(&self) -> bool {
-        self.features
+    pub fn result(self) -> (Arr<T>, bool) {
+        let has_cpuid = self
+            .features
             .get(CpuidFeature::CPUID as usize)
             .map(|i| i.found())
-            .unwrap_or_default()
+            .unwrap_or_default();
+
+        (self.features, has_cpuid)
     }
 }

@@ -1,14 +1,22 @@
 mod binary;
 mod cli;
 mod decoder;
+mod strings;
 mod types;
 
 use crate::{
     binary::{Binary, Segment},
     cli::{DecoderMode, OutputMode},
     decoder::{FDetail, FSimple, Feature, Task},
+    types::Arr,
 };
-use std::{env, error, fmt, fs::File, process::ExitCode, result};
+use std::{
+    env, error, fmt,
+    fs::File,
+    io::{self, Write},
+    process::ExitCode,
+    result,
+};
 
 const DEFAULT_DECODER_MODE: DecoderMode = DecoderMode::Simple;
 const DEFAULT_OUTPUT_MODE: OutputMode = OutputMode::Normal;
@@ -98,40 +106,56 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
     Ok(binary)
 }
 
-fn decode<T: Feature + fmt::Display>(
+fn print_simple(features: Arr<FSimple>) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+
+    for feature in features {
+        let (id, found) = feature.result();
+        if found {
+            write!(stdout, "{id:?} ")?;
+        }
+    }
+
+    writeln!(stdout)
+}
+
+fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+
+    for feature in features {
+        let (id, mut mnemonics) = feature.result();
+
+        if mnemonics.is_empty() {
+            continue;
+        }
+
+        mnemonics.sort_unstable_by(|a, b| strings::MNEMONIC[*a].cmp(strings::MNEMONIC[*b]));
+        write!(stdout, "{id:?} : ")?;
+
+        for mnemonic in mnemonics {
+            write!(stdout, "{} ", strings::MNEMONIC[mnemonic])?;
+        }
+
+        writeln!(stdout)?;
+    }
+
+    Ok(())
+}
+
+fn decode<T: Feature>(
     file: &mut File,
     binary: &Binary,
-    output_mode: OutputMode,
-) -> Result<()> {
+    print: fn(Arr<T>) -> io::Result<()>,
+) -> Result<bool> {
     let mut task = Task::<T>::new(or!(binary.bitness(), WrongArch));
 
     for segment in binary.segments() {
         task.read(file, segment.offset(), segment.size())?;
     }
 
-    task.finish();
-
-    if output_mode > OutputMode::Quiet {
-        println!("Features: ");
-    }
-
-    for feature in task.features() {
-        if feature.found() {
-            print!("{feature}");
-        }
-    }
-
-    if output_mode > OutputMode::Quiet {
-        if T::need_endln() {
-            println!();
-        }
-
-        if task.has_cpuid() {
-            println!("Warning: CPUID usage detected. Features could switch in runtime.");
-        }
-    }
-
-    Ok(())
+    let (features, has_cpuid) = task.result();
+    print(features)?;
+    Ok(has_cpuid)
 }
 
 fn run() -> Result<()> {
@@ -154,11 +178,21 @@ fn run() -> Result<()> {
     test!(file.metadata()?.file_type().is_dir(), WrongTarget);
     let binary = parse(&file, output_mode)?;
 
-    use DecoderMode::*;
-    match decoder_mode {
-        Simple => decode::<FSimple>(&mut file, &binary, output_mode),
-        Detail => decode::<FDetail>(&mut file, &binary, output_mode),
+    if output_mode > OutputMode::Quiet {
+        println!("Features: ");
     }
+
+    use DecoderMode::*;
+    let has_cpuid = match decoder_mode {
+        Simple => decode::<FSimple>(&mut file, &binary, print_simple)?,
+        Detail => decode::<FDetail>(&mut file, &binary, print_detail)?,
+    };
+
+    if output_mode > OutputMode::Quiet && has_cpuid {
+        println!("Warning: CPUID usage detected. Features could switch in runtime.");
+    }
+
+    Ok(())
 }
 
 fn main() -> ExitCode {
