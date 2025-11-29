@@ -15,26 +15,26 @@ pub trait Feature {
 
 pub struct FSimple {
     id: CpuidFeature,
-    found: bool,
+    count: usize,
 }
 
 impl FSimple {
-    pub fn result(self) -> (CpuidFeature, bool) {
-        (self.id, self.found)
+    pub fn result(self) -> (CpuidFeature, usize) {
+        (self.id, self.count)
     }
 }
 
 impl Feature for FSimple {
     fn new(id: CpuidFeature) -> Self {
-        Self { id, found: false }
+        Self { id, count: 0 }
     }
 
     fn add(&mut self, _: Instruction) {
-        self.found = true;
+        self.count += 1;
     }
 
     fn found(&self) -> bool {
-        self.found
+        self.count > 0
     }
 }
 

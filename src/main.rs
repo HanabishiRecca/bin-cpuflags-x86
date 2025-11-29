@@ -108,10 +108,10 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
 
 fn print_simple(features: Arr<FSimple>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
+    let features = features.into_iter().map(FSimple::result);
 
-    for feature in features {
-        let (id, found) = feature.result();
-        if found {
+    for (id, count) in features {
+        if count > 0 {
             write!(stdout, "{id:?} ")?;
         }
     }
@@ -121,10 +121,9 @@ fn print_simple(features: Arr<FSimple>) -> io::Result<()> {
 
 fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
+    let features = features.into_iter().map(FDetail::result);
 
-    for feature in features {
-        let (id, mut mnemonics) = feature.result();
-
+    for (id, mut mnemonics) in features {
         if mnemonics.is_empty() {
             continue;
         }
