@@ -1,6 +1,6 @@
 /// Keep in sync with iced-x86 `GEN_DEBUG_MNEMONIC`!
 /// We could convert case in runtime instead, but it is slower.
-pub static MNEMONIC: [&str; 1894] = [
+static MNEMONIC: [&str; 1894] = [
     "",
     "aaa",
     "aad",
@@ -1896,3 +1896,7 @@ pub static MNEMONIC: [&str; 1894] = [
     "vsm4key4",
     "vsm4rnds4",
 ];
+
+pub fn mnemonic(index: usize) -> &'static str {
+    MNEMONIC[index]
+}
