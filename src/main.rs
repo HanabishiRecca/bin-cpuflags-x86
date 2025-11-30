@@ -107,19 +107,25 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
     Ok(binary)
 }
 
+fn map_simple(feature: FSimple) -> &'static str {
+    let (id, _) = feature.result();
+    strings::feature(id as usize)
+}
+
 fn print_simple(features: Arr<FSimple>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
+    let features = features.into_iter().filter(FSimple::found).map(map_simple);
 
-    let features = features
-        .into_iter()
-        .filter(FSimple::found)
-        .map(FSimple::result);
-
-    for (id, _) in features {
-        write!(stdout, "{id:?} ")?;
+    for id in features {
+        write!(stdout, "{id} ")?;
     }
 
     writeln!(stdout)
+}
+
+fn map_stat(feature: FSimple) -> (&'static str, usize) {
+    let (id, count) = feature.result();
+    (strings::feature(id as usize), count)
 }
 
 fn print_stat(features: Arr<FSimple>) -> io::Result<()> {
@@ -128,30 +134,32 @@ fn print_stat(features: Arr<FSimple>) -> io::Result<()> {
     let mut features: Arr<_> = features
         .into_iter()
         .filter(FSimple::found)
-        .map(FSimple::result)
+        .map(map_stat)
         .collect();
 
+    let nlen = features.iter().map(|f| f.0.len()).max().unwrap_or(0);
     let total: usize = features.iter().map(|f| f.1).sum();
     features.sort_unstable_by_key(|f| Reverse(f.1));
 
     for (id, count) in features {
         let ratio = (count as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{id:?} : {count} ({ratio:.2}%)",)?;
+        writeln!(stdout, "{id:nlen$} {count} ({ratio:.2}%)",)?;
     }
 
     Ok(())
 }
 
+fn map_detail(feature: FDetail) -> (&'static str, Vec<usize>) {
+    let (id, mnemonics) = feature.result();
+    (strings::feature(id as usize), mnemonics)
+}
+
 fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-
-    let features = features
-        .into_iter()
-        .filter(FDetail::found)
-        .map(FDetail::result);
+    let features = features.into_iter().filter(FDetail::found).map(map_detail);
 
     for (id, mnemonics) in features {
-        write!(stdout, "{id:?} : ")?;
+        write!(stdout, "{id} : ")?;
         let mut mnemonics: Arr<_> = mnemonics.into_iter().map(strings::mnemonic).collect();
         mnemonics.sort_unstable();
 
