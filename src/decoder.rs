@@ -1,6 +1,9 @@
+mod strings;
+
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction};
 use std::{
+    fmt,
     fs::File,
     io::{BufRead, BufReader, Result, Seek, SeekFrom},
 };
@@ -13,20 +16,35 @@ pub trait Feature {
     fn found(&self) -> bool;
 }
 
+#[derive(PartialEq)]
+pub struct Id(usize);
+
+impl Id {
+    pub fn name(&self) -> &'static str {
+        strings::FEATURE[self.0]
+    }
+}
+
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.name().fmt(f)
+    }
+}
+
 pub struct FSimple {
-    id: CpuidFeature,
-    count: usize,
+    id: Id,
+    count: u64,
 }
 
 impl FSimple {
-    pub fn result(self) -> (CpuidFeature, usize) {
+    pub fn result(self) -> (Id, u64) {
         (self.id, self.count)
     }
 }
 
 impl Feature for FSimple {
     fn new(id: CpuidFeature) -> Self {
-        Self { id, count: 0 }
+        Self { id: Id(id as usize), count: 0 }
     }
 
     fn add(&mut self, _: Instruction) {
@@ -38,27 +56,39 @@ impl Feature for FSimple {
     }
 }
 
+#[derive(PartialEq)]
+pub struct Mnemonic(usize);
+
+impl Mnemonic {
+    pub fn name(&self) -> &'static str {
+        strings::MNEMONIC[self.0]
+    }
+}
+
+impl fmt::Display for Mnemonic {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.name().fmt(f)
+    }
+}
+
 pub struct FDetail {
-    id: CpuidFeature,
-    mnemonics: Vec<usize>,
+    id: Id,
+    mnemonics: Vec<Mnemonic>,
 }
 
 impl FDetail {
-    pub fn result(self) -> (CpuidFeature, Vec<usize>) {
+    pub fn result(self) -> (Id, Vec<Mnemonic>) {
         (self.id, self.mnemonics)
     }
 }
 
 impl Feature for FDetail {
     fn new(id: CpuidFeature) -> Self {
-        Self {
-            id,
-            mnemonics: Vec::new(),
-        }
+        Self { id: Id(id as usize), mnemonics: Vec::new() }
     }
 
     fn add(&mut self, instruction: Instruction) {
-        let mnemonic = instruction.mnemonic() as usize;
+        let mnemonic = Mnemonic(instruction.mnemonic() as usize);
         if !self.mnemonics.contains(&mnemonic) {
             self.mnemonics.push(mnemonic);
         }
@@ -76,10 +106,8 @@ pub struct Task<T: Feature> {
 
 impl<T: Feature> Task<T> {
     pub fn new(bitness: u32) -> Self {
-        Self {
-            bitness,
-            features: CpuidFeature::values().map(T::new).collect(),
-        }
+        let features = CpuidFeature::values().map(T::new).collect();
+        Self { bitness, features }
     }
 
     fn add(&mut self, instruction: Instruction) {
@@ -88,9 +116,7 @@ impl<T: Feature> Task<T> {
         }
 
         for id in instruction.cpuid_features() {
-            if let Some(feature) = self.features.get_mut(*id as usize) {
-                feature.add(instruction);
-            }
+            self.features[*id as usize].add(instruction);
         }
     }
 
@@ -107,12 +133,7 @@ impl<T: Feature> Task<T> {
     }
 
     pub fn result(self) -> (Arr<T>, bool) {
-        let has_cpuid = self
-            .features
-            .get(CpuidFeature::CPUID as usize)
-            .map(|i| i.found())
-            .unwrap_or_default();
-
+        let has_cpuid = self.features[CpuidFeature::CPUID as usize].found();
         (self.features, has_cpuid)
     }
 }

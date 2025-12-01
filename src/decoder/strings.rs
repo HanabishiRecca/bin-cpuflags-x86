@@ -1,5 +1,5 @@
 /// Keep in sync with iced-x86 `GEN_DEBUG_CPUID_FEATURE`!
-static FEATURE: [&str; 178] = [
+pub static FEATURE: [&str; 178] = [
     "INTEL8086",
     "INTEL8086_ONLY",
     "INTEL186",
@@ -180,13 +180,8 @@ static FEATURE: [&str; 178] = [
     "AVX_VNNI_INT16",
 ];
 
-pub fn feature(index: usize) -> &'static str {
-    FEATURE[index]
-}
-
 /// Keep in sync with iced-x86 `GEN_DEBUG_MNEMONIC`!
-/// We could convert case in runtime instead, but it is slower.
-static MNEMONIC: [&str; 1894] = [
+pub static MNEMONIC: [&str; 1894] = [
     "",
     "aaa",
     "aad",
@@ -2082,7 +2077,3 @@ static MNEMONIC: [&str; 1894] = [
     "vsm4key4",
     "vsm4rnds4",
 ];
-
-pub fn mnemonic(index: usize) -> &'static str {
-    MNEMONIC[index]
-}

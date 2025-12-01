@@ -1,13 +1,12 @@
 mod binary;
 mod cli;
 mod decoder;
-mod strings;
 mod types;
 
 use crate::{
     binary::{Binary, Segment},
     cli::{DecoderMode, OutputMode},
-    decoder::{FDetail, FSimple, Feature, Task},
+    decoder::{FDetail, FSimple, Feature, Mnemonic, Task},
     types::Arr,
 };
 use std::{
@@ -72,10 +71,7 @@ fn print_help() {
         include_str!("help.in"),
         PKG = env!("CARGO_PKG_NAME"),
         VER = env!("CARGO_PKG_VERSION"),
-        BIN_NAME = default!(
-            (|| bin.as_ref()?.file_name()?.to_str())(),
-            env!("CARGO_BIN_NAME")
-        ),
+        BIN_NAME = default!((|| bin.as_ref()?.file_name()?.to_str())(), env!("CARGO_BIN_NAME")),
     );
 }
 
@@ -107,61 +103,43 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
     Ok(binary)
 }
 
-fn map_simple(feature: FSimple) -> &'static str {
-    let (id, _) = feature.result();
-    strings::feature(id as usize)
-}
-
 fn print_simple(features: Arr<FSimple>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    let features = features.into_iter().filter(FSimple::found).map(map_simple);
+    let features = features.into_iter().filter(FSimple::found).map(FSimple::result);
 
-    for id in features {
+    for (id, _) in features {
         write!(stdout, "{id} ")?;
     }
 
     writeln!(stdout)
 }
 
-fn map_stat(feature: FSimple) -> (&'static str, usize) {
-    let (id, count) = feature.result();
-    (strings::feature(id as usize), count)
-}
-
 fn print_stat(features: Arr<FSimple>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
+    let mut features: Arr<_> =
+        features.into_iter().filter(FSimple::found).map(FSimple::result).collect();
+    features.sort_unstable_by_key(|(_, count)| Reverse(*count));
 
-    let mut features: Arr<_> = features
-        .into_iter()
-        .filter(FSimple::found)
-        .map(map_stat)
-        .collect();
+    let total: u64 = features.iter().map(|(_, count)| *count).sum();
+    writeln!(stdout, "Total: {total}")?;
 
-    let nlen = features.iter().map(|f| f.0.len()).max().unwrap_or(0);
-    let total: usize = features.iter().map(|f| f.1).sum();
-    features.sort_unstable_by_key(|f| Reverse(f.1));
+    let nlen = features.iter().map(|(id, _)| id.name().len()).max().unwrap_or(0);
 
     for (id, count) in features {
         let ratio = (count as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{id:nlen$} {count} ({ratio:.2}%)",)?;
+        writeln!(stdout, "{id:nlen$} {count} ({ratio:.2}%)")?;
     }
 
     Ok(())
 }
 
-fn map_detail(feature: FDetail) -> (&'static str, Vec<usize>) {
-    let (id, mnemonics) = feature.result();
-    (strings::feature(id as usize), mnemonics)
-}
-
 fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    let features = features.into_iter().filter(FDetail::found).map(map_detail);
+    let features = features.into_iter().filter(FDetail::found).map(FDetail::result);
 
-    for (id, mnemonics) in features {
-        write!(stdout, "{id} : ")?;
-        let mut mnemonics: Arr<_> = mnemonics.into_iter().map(strings::mnemonic).collect();
-        mnemonics.sort_unstable();
+    for (id, mut mnemonics) in features {
+        write!(stdout, "{id}: ")?;
+        mnemonics.sort_unstable_by_key(Mnemonic::name);
 
         for mnemonic in mnemonics {
             write!(stdout, "{mnemonic} ")?;
@@ -174,9 +152,7 @@ fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
 }
 
 fn decode<T: Feature>(
-    file: &mut File,
-    binary: &Binary,
-    print: fn(Arr<T>) -> io::Result<()>,
+    file: &mut File, binary: &Binary, print: fn(Arr<T>) -> io::Result<()>,
 ) -> Result<bool> {
     let mut task = Task::<T>::new(or!(binary.bitness(), WrongArch));
 
@@ -208,10 +184,6 @@ fn run() -> Result<()> {
     let mut file = File::open(file_path)?;
     test!(file.metadata()?.file_type().is_dir(), WrongTarget);
     let binary = parse(&file, output_mode)?;
-
-    if output_mode > OutputMode::Quiet {
-        println!("Features: ");
-    }
 
     use DecoderMode::*;
     let has_cpuid = match decoder_mode {

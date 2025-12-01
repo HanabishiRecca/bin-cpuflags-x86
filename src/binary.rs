@@ -36,11 +36,7 @@ pub struct Binary {
 
 impl Binary {
     pub fn new(format: BinaryFormat, architecture: Architecture, segments: Arr<Segment>) -> Self {
-        Self {
-            format,
-            architecture,
-            segments,
-        }
+        Self { format, architecture, segments }
     }
 
     pub fn format(&self) -> BinaryFormat {

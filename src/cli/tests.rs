@@ -10,16 +10,8 @@ macro_rules! read_args {
 fn args() {
     let file_path = "--/file/path";
 
-    let args = [
-        "--details",
-        "--verbose",
-        "--quiet",
-        "/wrong/path",
-        "",
-        "--",
-        file_path,
-        "--verbose",
-    ];
+    let args =
+        ["--details", "--verbose", "--quiet", "/wrong/path", "", "--", file_path, "--verbose"];
 
     let config = read_args!(args).unwrap().unwrap();
     assert_eq!(config.file_path(), Some(file_path));
