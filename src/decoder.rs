@@ -3,7 +3,6 @@ mod strings;
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder, DecoderOptions, Instruction};
 use std::{
-    fmt,
     fs::File,
     io::{BufRead, BufReader, Result, Seek, SeekFrom},
 };
@@ -16,35 +15,24 @@ pub trait Feature {
     fn found(&self) -> bool;
 }
 
-#[derive(PartialEq)]
-pub struct Id(usize);
-
-impl Id {
-    pub fn name(&self) -> &'static str {
-        strings::FEATURE[self.0]
-    }
-}
-
-impl fmt::Display for Id {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.name().fmt(f)
-    }
-}
-
 pub struct FSimple {
-    id: Id,
+    id: usize,
     count: u64,
 }
 
 impl FSimple {
-    pub fn result(self) -> (Id, u64) {
-        (self.id, self.count)
+    pub fn name(&self) -> &'static str {
+        strings::FEATURE[self.id]
+    }
+
+    pub fn count(&self) -> u64 {
+        self.count
     }
 }
 
 impl Feature for FSimple {
     fn new(id: CpuidFeature) -> Self {
-        Self { id: Id(id as usize), count: 0 }
+        Self { id: id as usize, count: 0 }
     }
 
     fn add(&mut self, _: Instruction) {
@@ -65,26 +53,24 @@ impl Mnemonic {
     }
 }
 
-impl fmt::Display for Mnemonic {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.name().fmt(f)
-    }
-}
-
 pub struct FDetail {
-    id: Id,
+    id: usize,
     mnemonics: Vec<Mnemonic>,
 }
 
 impl FDetail {
-    pub fn result(self) -> (Id, Vec<Mnemonic>) {
-        (self.id, self.mnemonics)
+    pub fn name(&self) -> &'static str {
+        strings::FEATURE[self.id]
+    }
+
+    pub fn into_mnemonics(self) -> Vec<Mnemonic> {
+        self.mnemonics
     }
 }
 
 impl Feature for FDetail {
     fn new(id: CpuidFeature) -> Self {
-        Self { id: Id(id as usize), mnemonics: Vec::new() }
+        Self { id: id as usize, mnemonics: Vec::new() }
     }
 
     fn add(&mut self, instruction: Instruction) {
@@ -132,8 +118,11 @@ impl<T: Feature> Task<T> {
         Ok(())
     }
 
-    pub fn result(self) -> (Arr<T>, bool) {
-        let has_cpuid = self.features[CpuidFeature::CPUID as usize].found();
-        (self.features, has_cpuid)
+    pub fn has_cpuid(&self) -> bool {
+        self.features[CpuidFeature::CPUID as usize].found()
+    }
+
+    pub fn into_features(self) -> Arr<T> {
+        self.features.into_iter().filter(T::found).collect()
     }
 }

@@ -103,46 +103,58 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
     Ok(binary)
 }
 
-fn print_simple(features: Arr<FSimple>) -> io::Result<()> {
+fn print_simple(features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    let features = features.into_iter().filter(FSimple::found).map(FSimple::result);
 
-    for (id, _) in features {
-        write!(stdout, "{id} ")?;
+    if output_mode > OutputMode::Quiet {
+        write!(stdout, "Features: ")?;
     }
 
-    writeln!(stdout)
+    for feature in features {
+        write!(stdout, "{} ", feature.name())?;
+    }
+
+    writeln!(stdout)?;
+
+    Ok(())
 }
 
-fn print_stat(features: Arr<FSimple>) -> io::Result<()> {
+fn print_stat(mut features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    let mut features: Arr<_> =
-        features.into_iter().filter(FSimple::found).map(FSimple::result).collect();
-    features.sort_unstable_by_key(|(_, count)| Reverse(*count));
 
-    let total: u64 = features.iter().map(|(_, count)| *count).sum();
-    writeln!(stdout, "Total: {total}")?;
+    if output_mode > OutputMode::Quiet {
+        writeln!(stdout, "----------")?;
+    }
 
-    let nlen = features.iter().map(|(id, _)| id.name().len()).max().unwrap_or(0);
+    features.sort_unstable_by_key(|feature| Reverse(feature.count()));
 
-    for (id, count) in features {
-        let ratio = (count as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{id:nlen$} {count} ({ratio:.2}%)")?;
+    let nlen = features.iter().map(|f| f.name().len()).max().unwrap_or(0);
+    let total: u64 = features.iter().map(FSimple::count).sum();
+    writeln!(stdout, "{:nlen$} {total}", "=")?;
+
+    for feature in features {
+        let ratio = (feature.count() as f64 / total as f64) * 100.0;
+        writeln!(stdout, "{:nlen$} {} ({ratio:.2}%)", feature.name(), feature.count())?;
     }
 
     Ok(())
 }
 
-fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
+fn print_detail(features: Arr<FDetail>, output_mode: OutputMode) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    let features = features.into_iter().filter(FDetail::found).map(FDetail::result);
 
-    for (id, mut mnemonics) in features {
-        write!(stdout, "{id}: ")?;
+    if output_mode > OutputMode::Quiet {
+        writeln!(stdout, "----------")?;
+    }
+
+    for feature in features {
+        write!(stdout, "{}: ", feature.name())?;
+
+        let mut mnemonics = feature.into_mnemonics();
         mnemonics.sort_unstable_by_key(Mnemonic::name);
 
         for mnemonic in mnemonics {
-            write!(stdout, "{mnemonic} ")?;
+            write!(stdout, "{} ", mnemonic.name())?;
         }
 
         writeln!(stdout)?;
@@ -152,17 +164,21 @@ fn print_detail(features: Arr<FDetail>) -> io::Result<()> {
 }
 
 fn decode<T: Feature>(
-    file: &mut File, binary: &Binary, print: fn(Arr<T>) -> io::Result<()>,
-) -> Result<bool> {
+    mut file: File, binary: Binary, output_mode: OutputMode,
+    print: fn(Arr<T>, OutputMode) -> io::Result<()>,
+) -> Result<()> {
     let mut task = Task::<T>::new(or!(binary.bitness(), WrongArch));
 
     for segment in binary.segments() {
-        task.read(file, segment.offset(), segment.size())?;
+        task.read(&mut file, segment.offset(), segment.size())?;
     }
 
-    let (features, has_cpuid) = task.result();
-    print(features)?;
-    Ok(has_cpuid)
+    if output_mode > OutputMode::Quiet && task.has_cpuid() {
+        println!("Warning: CPUID usage detected. Features could switch in runtime.");
+    }
+
+    print(task.into_features(), output_mode)?;
+    Ok(())
 }
 
 fn run() -> Result<()> {
@@ -170,10 +186,12 @@ fn run() -> Result<()> {
         print_help();
         return Ok(());
     };
+
     let Some(file_path) = config.file_path() else {
         print_help();
         return Ok(());
     };
+
     let decoder_mode = default!(config.decoder_mode(), DEFAULT_DECODER_MODE);
     let output_mode = default!(config.output_mode(), DEFAULT_OUTPUT_MODE);
 
@@ -181,20 +199,17 @@ fn run() -> Result<()> {
         println!("Reading '{file_path}'...");
     }
 
-    let mut file = File::open(file_path)?;
+    let file = File::open(file_path)?;
     test!(file.metadata()?.file_type().is_dir(), WrongTarget);
+
     let binary = parse(&file, output_mode)?;
 
     use DecoderMode::*;
-    let has_cpuid = match decoder_mode {
-        Simple => decode::<FSimple>(&mut file, &binary, print_simple)?,
-        Stat => decode::<FSimple>(&mut file, &binary, print_stat)?,
-        Detail => decode::<FDetail>(&mut file, &binary, print_detail)?,
+    match decoder_mode {
+        Simple => decode(file, binary, output_mode, print_simple)?,
+        Stat => decode(file, binary, output_mode, print_stat)?,
+        Detail => decode(file, binary, output_mode, print_detail)?,
     };
-
-    if output_mode > OutputMode::Quiet && has_cpuid {
-        println!("Warning: CPUID usage detected. Features could switch in runtime.");
-    }
 
     Ok(())
 }
