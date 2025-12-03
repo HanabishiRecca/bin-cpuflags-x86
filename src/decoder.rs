@@ -75,6 +75,7 @@ impl Feature for FDetail {
 
     fn add(&mut self, instruction: Instruction) {
         let mnemonic = Mnemonic(instruction.mnemonic() as usize);
+
         if !self.mnemonics.contains(&mnemonic) {
             self.mnemonics.push(mnemonic);
         }
@@ -108,6 +109,7 @@ impl<T: Feature> Task<T> {
 
     pub fn read(&mut self, file: &mut File, offset: u64, size: u64) -> Result<()> {
         file.seek(SeekFrom::Start(offset))?;
+
         let mut reader = BufReader::with_capacity(size as usize, file);
         let decoder = Decoder::new(self.bitness, reader.fill_buf()?, OPTIONS);
 

@@ -62,22 +62,15 @@ impl Binary {
 }
 
 fn map_section<'a>(section: Section<'a, 'a, impl ReadRef<'a>>) -> Option<Segment> {
-    use SectionKind::*;
-    match section.kind() {
-        Text => section
-            .file_range()
-            .map(|(offset, size)| Segment::new(section.name().ok().map(Str::from), offset, size)),
-        _ => None,
-    }
+    (section.kind() == SectionKind::Text).then_some(())?;
+    let (offset, size) = section.file_range()?;
+    let name = section.name().ok().map(Str::from);
+    Some(Segment::new(name, offset, size))
 }
 
 pub fn parse(file: &std::fs::File) -> Result<Binary> {
     let cache = ReadCache::new(file);
     let binary = File::parse(&cache)?;
-
-    Ok(Binary::new(
-        binary.format(),
-        binary.architecture(),
-        binary.sections().filter_map(map_section).collect(),
-    ))
+    let sections = binary.sections().filter_map(map_section).collect();
+    Ok(Binary::new(binary.format(), binary.architecture(), sections))
 }

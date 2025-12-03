@@ -10,13 +10,25 @@ macro_rules! read_args {
 fn args() {
     let file_path = "--/file/path";
 
-    let args =
-        ["--details", "--verbose", "--quiet", "/wrong/path", "", "--", file_path, "--verbose"];
+    let args = [
+        "--details",
+        "--mode",
+        "stats",
+        "--verbose",
+        "--output",
+        "quiet",
+        "/wrong/path",
+        "",
+        "--",
+        file_path,
+        "--details",
+        "--verbose",
+    ];
 
     let config = read_args!(args).unwrap().unwrap();
     assert_eq!(config.file_path(), Some(file_path));
-    assert_eq!(config.decoder_mode(), Some(DecoderMode::Detail));
-    assert_eq!(config.output_mode(), Some(OutputMode::Quiet));
+    assert_eq!(config.mode(), Some(Mode::Stats));
+    assert_eq!(config.output(), Some(Output::Quiet));
 }
 
 macro_rules! test_args {
@@ -39,6 +51,16 @@ macro_rules! test_error {
     ($a: expr, $r: pat) => {
         assert!(matches!(read_args!($a), Err($r)))
     };
+}
+
+#[test]
+fn no_value() {
+    test_error!(["--mode"], Error::NoValue(_));
+}
+
+#[test]
+fn invalid_value() {
+    test_error!(["--mode", "foo"], Error::InvalidValue(..));
 }
 
 #[test]

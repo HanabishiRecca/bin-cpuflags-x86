@@ -7,8 +7,13 @@ Usage:
 
 Options:
 
-  -d, --details    enable detailed report about instructions used (slower)
-  -v, --verbose    enable more verbose output
-  -q, --quiet      print only the result data
-  -h, --help       display this message and exit
-      --           stop reading any options and treat the next argument as a file path
+      --mode <mode>       select mode of operation: detect, stats or details
+  -s, --stats             alias for '--mode stats'
+  -d, --details           alias for '--mode details'
+
+      --output <level>    select output level: normal, quiet or verbose
+  -q, --quiet             alias for '--output quiet'
+  -v, --verbose           alias for '--output verbose'
+
+  -h, --help              display this message and exit
+      --                  stop reading any options and treat the next argument as a file path

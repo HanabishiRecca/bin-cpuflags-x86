@@ -5,7 +5,7 @@ mod types;
 
 use crate::{
     binary::{Binary, Segment},
-    cli::{DecoderMode, OutputMode},
+    cli::{Mode, Output},
     decoder::{FDetail, FSimple, Feature, Mnemonic, Task},
     types::Arr,
 };
@@ -18,8 +18,8 @@ use std::{
     result,
 };
 
-const DEFAULT_DECODER_MODE: DecoderMode = DecoderMode::Simple;
-const DEFAULT_OUTPUT_MODE: OutputMode = OutputMode::Normal;
+const DEFAULT_MODE: Mode = Mode::Detect;
+const DEFAULT_OUTPUT: Output = Output::Normal;
 
 macro_rules! default {
     ($option: expr, $default: expr) => {
@@ -84,10 +84,10 @@ fn print_section(segment: &Segment) {
     );
 }
 
-fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
+fn parse(file: &File, output: Output) -> Result<Binary> {
     let binary = binary::parse(file)?;
 
-    if output_mode > OutputMode::Quiet {
+    if output > Output::Quiet {
         println!("Format: {:?}", binary.format());
         println!("Architecture: {:?}", binary.architecture());
     }
@@ -95,7 +95,7 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
     let sections = binary.segments();
     test!(sections.is_empty(), NoText);
 
-    if output_mode > OutputMode::Normal {
+    if output > Output::Normal {
         println!("Text sections: ");
         sections.iter().for_each(print_section);
     }
@@ -103,24 +103,24 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
     Ok(binary)
 }
 
-fn decode<T: Feature>(mut file: File, binary: Binary, output_mode: OutputMode) -> Result<Arr<T>> {
+fn decode<T: Feature>(mut file: File, binary: Binary, output: Output) -> Result<Arr<T>> {
     let mut task = Task::new(or!(binary.bitness(), WrongArch));
 
     for segment in binary.segments() {
         task.read(&mut file, segment.offset(), segment.size())?;
     }
 
-    if output_mode > OutputMode::Quiet && task.has_cpuid() {
+    if output > Output::Quiet && task.has_cpuid() {
         println!("Warning: CPUID usage detected. Features could switch in runtime.");
     }
 
     Ok(task.into_features())
 }
 
-fn print_simple(features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<()> {
+fn print_detect(features: Arr<FSimple>, output: Output) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
 
-    if output_mode > OutputMode::Quiet {
+    if output > Output::Quiet {
         write!(stdout, "Features: ")?;
     }
 
@@ -131,10 +131,10 @@ fn print_simple(features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<(
     writeln!(stdout)
 }
 
-fn print_stat(mut features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<()> {
+fn print_stats(mut features: Arr<FSimple>, output: Output) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
 
-    if output_mode > OutputMode::Quiet {
+    if output > Output::Quiet {
         writeln!(stdout, "----------")?;
     }
 
@@ -152,10 +152,10 @@ fn print_stat(mut features: Arr<FSimple>, output_mode: OutputMode) -> io::Result
     Ok(())
 }
 
-fn print_detail(features: Arr<FDetail>, output_mode: OutputMode) -> io::Result<()> {
+fn print_details(features: Arr<FDetail>, output: Output) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
 
-    if output_mode > OutputMode::Quiet {
+    if output > Output::Quiet {
         writeln!(stdout, "----------")?;
     }
 
@@ -184,23 +184,23 @@ fn run() -> Result<bool> {
         return Ok(true);
     };
 
-    let decoder_mode = default!(config.decoder_mode(), DEFAULT_DECODER_MODE);
-    let output_mode = default!(config.output_mode(), DEFAULT_OUTPUT_MODE);
+    let mode = default!(config.mode(), DEFAULT_MODE);
+    let output = default!(config.output(), DEFAULT_OUTPUT);
 
-    if output_mode > OutputMode::Normal {
+    if output > Output::Normal {
         println!("Reading '{file_path}'...");
     }
 
     let file = File::open(file_path)?;
     test!(file.metadata()?.file_type().is_dir(), WrongTarget);
 
-    let binary = parse(&file, output_mode)?;
+    let binary = parse(&file, output)?;
 
-    use DecoderMode::*;
-    match decoder_mode {
-        Simple => print_simple(decode(file, binary, output_mode)?, output_mode),
-        Stat => print_stat(decode(file, binary, output_mode)?, output_mode),
-        Detail => print_detail(decode(file, binary, output_mode)?, output_mode),
+    use Mode::*;
+    match mode {
+        Detect => print_detect(decode(file, binary, output)?, output),
+        Stats => print_stats(decode(file, binary, output)?, output),
+        Details => print_details(decode(file, binary, output)?, output),
     }?;
 
     Ok(false)

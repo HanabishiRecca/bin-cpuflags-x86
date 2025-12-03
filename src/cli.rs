@@ -2,18 +2,19 @@
 mod tests;
 
 use crate::types::Str;
+use std::{error, fmt};
 
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
-pub enum DecoderMode {
-    Simple,
-    Stat,
-    Detail,
+pub enum Mode {
+    Detect,
+    Stats,
+    Details,
 }
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 #[cfg_attr(test, derive(Debug))]
-pub enum OutputMode {
+pub enum Output {
     Quiet,
     Normal,
     Verbose,
@@ -23,8 +24,8 @@ pub enum OutputMode {
 #[cfg_attr(test, derive(Debug, PartialEq))]
 pub struct Config {
     file_path: Option<Str>,
-    decoder_mode: Option<DecoderMode>,
-    output_mode: Option<OutputMode>,
+    mode: Option<Mode>,
+    output: Option<Output>,
 }
 
 impl Config {
@@ -32,26 +33,30 @@ impl Config {
         self.file_path.as_deref()
     }
 
-    pub fn decoder_mode(&self) -> Option<DecoderMode> {
-        self.decoder_mode
+    pub fn mode(&self) -> Option<Mode> {
+        self.mode
     }
 
-    pub fn output_mode(&self) -> Option<OutputMode> {
-        self.output_mode
+    pub fn output(&self) -> Option<Output> {
+        self.output
     }
 }
 
 #[derive(Debug)]
 pub enum Error {
+    NoValue(Str),
+    InvalidValue(Str, Str),
     Unknown(Str),
 }
 
-impl std::error::Error for Error {}
+impl error::Error for Error {}
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use Error::*;
         match self {
+            NoValue(arg) => write!(f, "Option '{arg}' requires a value"),
+            InvalidValue(arg, value) => write!(f, "Invalid value '{value}' for option '{arg}'"),
             Unknown(arg) => write!(f, "Unknown option '{arg}'"),
         }
     }
@@ -68,44 +73,81 @@ macro_rules! E {
 
 macro_rules! F {
     ($s: expr) => {
-        From::from($s)
+        From::from($s.as_ref())
     };
 }
 
-pub fn read_args(args: impl Iterator<Item = impl AsRef<str>>) -> Result<Option<Config>> {
+pub fn read_args(mut args: impl Iterator<Item = impl AsRef<str>>) -> Result<Option<Config>> {
     let mut config = Config::default();
     let mut escape = false;
 
-    for arg in args {
+    while let Some(arg) = args.next() {
         let arg = arg.as_ref();
+
         if escape {
             config.file_path = Some(F!(arg));
             break;
         }
+
         if arg.is_empty() {
             continue;
         }
+
         if !arg.starts_with('-') {
             config.file_path = Some(F!(arg));
             continue;
         }
+
+        macro_rules! next {
+            () => {
+                match args.next() {
+                    Some(value) => value,
+                    _ => E!(NoValue(F!(arg))),
+                }
+            };
+        }
+
         match arg {
+            "--mode" => {
+                let value = next!();
+                use Mode::*;
+                config.mode = Some(match value.as_ref() {
+                    "detect" => Detect,
+                    "stats" => Stats,
+                    "details" => Details,
+                    _ => E!(InvalidValue(F!(arg), F!(value))),
+                });
+            }
             "-s" | "--stats" => {
-                config.decoder_mode = Some(DecoderMode::Stat);
+                config.mode = Some(Mode::Stats);
             }
             "-d" | "--details" => {
-                config.decoder_mode = Some(DecoderMode::Detail);
+                config.mode = Some(Mode::Details);
+            }
+
+            "--output" => {
+                let value = next!();
+                use Output::*;
+                config.output = Some(match value.as_ref() {
+                    "quiet" => Quiet,
+                    "normal" => Normal,
+                    "verbose" => Verbose,
+                    _ => E!(InvalidValue(F!(arg), F!(value))),
+                });
             }
             "-v" | "--verbose" => {
-                config.output_mode = Some(OutputMode::Verbose);
+                config.output = Some(Output::Verbose);
             }
             "-q" | "--quiet" => {
-                config.output_mode = Some(OutputMode::Quiet);
+                config.output = Some(Output::Quiet);
             }
+
+            "-h" | "--help" => return Ok(None),
+
             "--" => {
                 escape = true;
             }
-            "-h" | "--help" => return Ok(None),
+
             _ => E!(Unknown(F!(arg))),
         }
     }
