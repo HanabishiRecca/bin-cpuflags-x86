@@ -103,6 +103,20 @@ fn parse(file: &File, output_mode: OutputMode) -> Result<Binary> {
     Ok(binary)
 }
 
+fn decode<T: Feature>(mut file: File, binary: Binary, output_mode: OutputMode) -> Result<Arr<T>> {
+    let mut task = Task::new(or!(binary.bitness(), WrongArch));
+
+    for segment in binary.segments() {
+        task.read(&mut file, segment.offset(), segment.size())?;
+    }
+
+    if output_mode > OutputMode::Quiet && task.has_cpuid() {
+        println!("Warning: CPUID usage detected. Features could switch in runtime.");
+    }
+
+    Ok(task.into_features())
+}
+
 fn print_simple(features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
 
@@ -114,9 +128,7 @@ fn print_simple(features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<(
         write!(stdout, "{} ", feature.name())?;
     }
 
-    writeln!(stdout)?;
-
-    Ok(())
+    writeln!(stdout)
 }
 
 fn print_stat(mut features: Arr<FSimple>, output_mode: OutputMode) -> io::Result<()> {
@@ -163,33 +175,13 @@ fn print_detail(features: Arr<FDetail>, output_mode: OutputMode) -> io::Result<(
     Ok(())
 }
 
-fn decode<T: Feature>(
-    mut file: File, binary: Binary, output_mode: OutputMode,
-    print: fn(Arr<T>, OutputMode) -> io::Result<()>,
-) -> Result<()> {
-    let mut task = Task::<T>::new(or!(binary.bitness(), WrongArch));
-
-    for segment in binary.segments() {
-        task.read(&mut file, segment.offset(), segment.size())?;
-    }
-
-    if output_mode > OutputMode::Quiet && task.has_cpuid() {
-        println!("Warning: CPUID usage detected. Features could switch in runtime.");
-    }
-
-    print(task.into_features(), output_mode)?;
-    Ok(())
-}
-
-fn run() -> Result<()> {
+fn run() -> Result<bool> {
     let Some(config) = cli::read_args(env::args().skip(1))? else {
-        print_help();
-        return Ok(());
+        return Ok(true);
     };
 
     let Some(file_path) = config.file_path() else {
-        print_help();
-        return Ok(());
+        return Ok(true);
     };
 
     let decoder_mode = default!(config.decoder_mode(), DEFAULT_DECODER_MODE);
@@ -206,20 +198,25 @@ fn run() -> Result<()> {
 
     use DecoderMode::*;
     match decoder_mode {
-        Simple => decode(file, binary, output_mode, print_simple)?,
-        Stat => decode(file, binary, output_mode, print_stat)?,
-        Detail => decode(file, binary, output_mode, print_detail)?,
-    };
+        Simple => print_simple(decode(file, binary, output_mode)?, output_mode),
+        Stat => print_stat(decode(file, binary, output_mode)?, output_mode),
+        Detail => print_detail(decode(file, binary, output_mode)?, output_mode),
+    }?;
 
-    Ok(())
+    Ok(false)
 }
 
 fn main() -> ExitCode {
     match run() {
+        Ok(help) => {
+            if help {
+                print_help();
+            }
+            ExitCode::SUCCESS
+        }
         Err(e) => {
             eprintln!("Error: {e}");
             ExitCode::FAILURE
         }
-        _ => ExitCode::SUCCESS,
     }
 }
