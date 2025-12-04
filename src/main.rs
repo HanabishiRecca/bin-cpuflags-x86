@@ -111,7 +111,7 @@ fn decode<T: Feature>(mut file: File, binary: Binary, output: Output) -> Result<
     }
 
     if output > Output::Quiet && task.has_cpuid() {
-        println!("Warning: CPUID usage detected. Features could switch in runtime.");
+        println!("Warning: CPUID usage detected, features could switch in runtime");
     }
 
     Ok(task.into_features())
@@ -140,7 +140,7 @@ fn print_stats(mut features: Arr<FSimple>, output: Output) -> io::Result<()> {
 
     features.sort_unstable_by_key(|feature| Reverse(feature.count()));
 
-    let nlen = features.iter().map(|f| f.name().len()).max().unwrap_or(0);
+    let nlen = features.iter().map(FSimple::name).map(str::len).max().unwrap_or(0);
     let total: u64 = features.iter().map(FSimple::count).sum();
     writeln!(stdout, "{:nlen$} {total}", "=")?;
 
@@ -209,9 +209,7 @@ fn run() -> Result<bool> {
 fn main() -> ExitCode {
     match run() {
         Ok(help) => {
-            if help {
-                print_help();
-            }
+            help.then(print_help);
             ExitCode::SUCCESS
         }
         Err(e) => {
