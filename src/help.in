@@ -7,11 +7,12 @@ Usage:
 
 Options:
 
-      --mode <mode>       select mode of operation: detect, stats or details
+      --mode <mode>       select mode of operation: detect, stats, details, widestats
   -s, --stats             alias for '--mode stats'
   -d, --details           alias for '--mode details'
+  -w, --widestats         alias for '--mode widestats'
 
-      --output <level>    select output level: normal, quiet or verbose
+      --output <level>    select output level: normal, quiet, verbose
   -q, --quiet             alias for '--output quiet'
   -v, --verbose           alias for '--output verbose'
 

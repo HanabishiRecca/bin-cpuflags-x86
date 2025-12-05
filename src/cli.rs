@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::types::Str;
-use std::{error, fmt};
+use std::{error, fmt, result};
 
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
@@ -10,6 +10,7 @@ pub enum Mode {
     Detect,
     Stats,
     Details,
+    WideStats,
 }
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
@@ -62,7 +63,7 @@ impl fmt::Display for Error {
     }
 }
 
-type Result<T> = std::result::Result<T, Error>;
+type Result<T> = result::Result<T, Error>;
 
 macro_rules! E {
     ($e: expr) => {{
@@ -115,6 +116,7 @@ pub fn read_args(mut args: impl Iterator<Item = impl AsRef<str>>) -> Result<Opti
                     "detect" => Detect,
                     "stats" => Stats,
                     "details" => Details,
+                    "widestats" => WideStats,
                     _ => E!(InvalidValue(F!(arg), F!(value))),
                 });
             }
@@ -123,6 +125,9 @@ pub fn read_args(mut args: impl Iterator<Item = impl AsRef<str>>) -> Result<Opti
             }
             "-d" | "--details" => {
                 config.mode = Some(Mode::Details);
+            }
+            "-w" | "--widestats" => {
+                config.mode = Some(Mode::WideStats);
             }
 
             "--output" => {

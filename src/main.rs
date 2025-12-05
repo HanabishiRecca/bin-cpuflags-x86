@@ -175,6 +175,39 @@ fn print_details(features: Arr<FDetail>, output: Output) -> io::Result<()> {
     Ok(())
 }
 
+fn print_wide_stats(mut features: Arr<FDetail>, output: Output) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+
+    if output > Output::Quiet {
+        writeln!(stdout, "----------")?;
+    }
+
+    features.sort_unstable_by_key(|feature| Reverse(feature.count()));
+
+    let total: u64 = features.iter().map(FDetail::count).sum();
+    writeln!(stdout, "= {total}")?;
+    writeln!(stdout)?;
+
+    for feature in features {
+        let ratio = (feature.count() as f64 / total as f64) * 100.0;
+        writeln!(stdout, "{} {} ({ratio:.2}%):", feature.name(), feature.count())?;
+
+        let mut mnemonics = feature.into_mnemonics();
+        mnemonics.sort_unstable_by_key(|mnemonic| Reverse(mnemonic.count()));
+
+        let nlen = mnemonics.iter().map(Mnemonic::name).map(str::len).max().unwrap_or(0);
+
+        for mnemonic in mnemonics {
+            let ratio = (mnemonic.count() as f64 / total as f64) * 100.0;
+            writeln!(stdout, "    {:nlen$} {} ({ratio:.2}%)", mnemonic.name(), mnemonic.count())?;
+        }
+
+        writeln!(stdout)?;
+    }
+
+    Ok(())
+}
+
 fn run() -> Result<bool> {
     let Some(config) = cli::read_args(env::args().skip(1))? else {
         return Ok(true);
@@ -201,6 +234,7 @@ fn run() -> Result<bool> {
         Detect => print_detect(decode(file, binary, output)?, output),
         Stats => print_stats(decode(file, binary, output)?, output),
         Details => print_details(decode(file, binary, output)?, output),
+        WideStats => print_wide_stats(decode(file, binary, output)?, output),
     }?;
 
     Ok(false)

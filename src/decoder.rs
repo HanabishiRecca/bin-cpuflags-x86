@@ -44,23 +44,46 @@ impl Feature for FSimple {
     }
 }
 
-#[derive(PartialEq)]
-pub struct Mnemonic(usize);
+pub struct Mnemonic {
+    id: usize,
+    count: u64,
+}
 
 impl Mnemonic {
+    fn new(id: usize) -> Self {
+        Self { id, count: 1 }
+    }
+
+    fn id(&self) -> usize {
+        self.id
+    }
+
+    fn inc(&mut self) {
+        self.count += 1;
+    }
+
     pub fn name(&self) -> &'static str {
-        strings::MNEMONIC[self.0]
+        strings::MNEMONIC[self.id]
+    }
+
+    pub fn count(&self) -> u64 {
+        self.count
     }
 }
 
 pub struct FDetail {
     id: usize,
+    count: u64,
     mnemonics: Vec<Mnemonic>,
 }
 
 impl FDetail {
     pub fn name(&self) -> &'static str {
         strings::FEATURE[self.id]
+    }
+
+    pub fn count(&self) -> u64 {
+        self.count
     }
 
     pub fn into_mnemonics(self) -> Vec<Mnemonic> {
@@ -70,19 +93,21 @@ impl FDetail {
 
 impl Feature for FDetail {
     fn new(id: CpuidFeature) -> Self {
-        Self { id: id as usize, mnemonics: Vec::new() }
+        Self { id: id as usize, count: 0, mnemonics: Vec::new() }
     }
 
     fn add(&mut self, instruction: Instruction) {
-        let mnemonic = Mnemonic(instruction.mnemonic() as usize);
+        self.count += 1;
+        let id = instruction.mnemonic() as usize;
 
-        if !self.mnemonics.contains(&mnemonic) {
-            self.mnemonics.push(mnemonic);
+        match self.mnemonics.iter_mut().find(|mnemonic| mnemonic.id() == id) {
+            Some(mnemonic) => mnemonic.inc(),
+            _ => self.mnemonics.push(Mnemonic::new(id)),
         }
     }
 
     fn found(&self) -> bool {
-        !self.mnemonics.is_empty()
+        self.count > 0
     }
 }
 
