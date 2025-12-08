@@ -6,7 +6,7 @@ mod types;
 use crate::{
     binary::{Binary, Segment},
     cli::{Mode, Output},
-    decoder::{FDetail, FSimple, Feature, Mnemonic, Task},
+    decoder::{Decoder, Record, RecordF, Task, TaskCount, TaskDetail, TaskDetect},
     types::Arr,
 };
 use std::{
@@ -84,6 +84,13 @@ fn print_section(segment: &Segment) {
     );
 }
 
+fn print_header(text: &str) {
+    let len = text.len() + 8;
+    println!("{:-<len$}", "");
+    println!("{text:^len$}");
+    println!("{:-<len$}", "");
+}
+
 fn parse(file: &File, output: Output) -> Result<Binary> {
     let binary = binary::parse(file)?;
 
@@ -103,26 +110,18 @@ fn parse(file: &File, output: Output) -> Result<Binary> {
     Ok(binary)
 }
 
-fn decode<T: Feature>(mut file: File, binary: Binary, output: Output) -> Result<Arr<T>> {
-    let mut task = Task::new(or!(binary.bitness(), WrongArch));
+fn decode<T: Task>(mut file: File, binary: Binary) -> Result<T> {
+    let mut decoder = Decoder::new(or!(binary.bitness(), WrongArch));
 
     for segment in binary.segments() {
-        task.read(&mut file, segment.offset(), segment.size())?;
+        decoder.read(&mut file, segment.offset(), segment.size())?;
     }
 
-    if output > Output::Quiet && task.has_cpuid() {
-        println!("Warning: CPUID usage detected, features could switch in runtime");
-    }
-
-    Ok(task.into_features())
+    Ok(decoder.into_task())
 }
 
-fn print_detect(features: Arr<FSimple>, output: Output) -> io::Result<()> {
+fn print_detect(features: Arr<Record>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-
-    if output > Output::Quiet {
-        write!(stdout, "Features: ")?;
-    }
 
     for feature in features {
         write!(stdout, "{} ", feature.name())?;
@@ -131,71 +130,40 @@ fn print_detect(features: Arr<FSimple>, output: Output) -> io::Result<()> {
     writeln!(stdout)
 }
 
-fn print_stats(mut features: Arr<FSimple>, output: Output) -> io::Result<()> {
+fn print_records(mut records: Arr<Record>) -> io::Result<()> {
+    records.sort_unstable_by_key(|feature| Reverse(feature.count()));
+
+    let nlen = records.iter().map(Record::name).map(str::len).max().unwrap_or(0);
+    let total: u64 = records.iter().map(Record::count).sum();
+
     let mut stdout = io::stdout().lock();
-
-    if output > Output::Quiet {
-        writeln!(stdout, "----------")?;
-    }
-
-    features.sort_unstable_by_key(|feature| Reverse(feature.count()));
-
-    let nlen = features.iter().map(FSimple::name).map(str::len).max().unwrap_or(0);
-    let total: u64 = features.iter().map(FSimple::count).sum();
     writeln!(stdout, "{:nlen$} {total}", "=")?;
 
-    for feature in features {
-        let ratio = (feature.count() as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{:nlen$} {} ({ratio:.2}%)", feature.name(), feature.count())?;
+    for register in records {
+        let ratio = (register.count() as f64 / total as f64) * 100.0;
+        writeln!(stdout, "{:nlen$} {} ({ratio:.2}%)", register.name(), register.count())?;
     }
 
-    Ok(())
+    writeln!(stdout)
 }
 
-fn print_details(features: Arr<FDetail>, output: Output) -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-
-    if output > Output::Quiet {
-        writeln!(stdout, "----------")?;
-    }
-
-    for feature in features {
-        write!(stdout, "{}: ", feature.name())?;
-
-        let mut mnemonics = feature.into_mnemonics();
-        mnemonics.sort_unstable_by_key(Mnemonic::name);
-
-        for mnemonic in mnemonics {
-            write!(stdout, "{} ", mnemonic.name())?;
-        }
-
-        writeln!(stdout)?;
-    }
-
-    Ok(())
-}
-
-fn print_wide_stats(mut features: Arr<FDetail>, output: Output) -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-
-    if output > Output::Quiet {
-        writeln!(stdout, "----------")?;
-    }
-
+fn print_features(mut features: Arr<RecordF>) -> io::Result<()> {
     features.sort_unstable_by_key(|feature| Reverse(feature.count()));
 
-    let total: u64 = features.iter().map(FDetail::count).sum();
+    let total: u64 = features.iter().map(RecordF::count).sum();
+
+    let mut stdout = io::stdout().lock();
     writeln!(stdout, "= {total}")?;
     writeln!(stdout)?;
 
     for feature in features {
         let ratio = (feature.count() as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{} {} ({ratio:.2}%):", feature.name(), feature.count())?;
+        writeln!(stdout, "{} {} ({ratio:.2}%)", feature.name(), feature.count())?;
 
         let mut mnemonics = feature.into_mnemonics();
         mnemonics.sort_unstable_by_key(|mnemonic| Reverse(mnemonic.count()));
 
-        let nlen = mnemonics.iter().map(Mnemonic::name).map(str::len).max().unwrap_or(0);
+        let nlen = mnemonics.iter().map(Record::name).map(str::len).max().unwrap_or(0);
 
         for mnemonic in mnemonics {
             let ratio = (mnemonic.count() as f64 / total as f64) * 100.0;
@@ -231,11 +199,45 @@ fn run() -> Result<bool> {
 
     use Mode::*;
     match mode {
-        Detect => print_detect(decode(file, binary, output)?, output),
-        Stats => print_stats(decode(file, binary, output)?, output),
-        Details => print_details(decode(file, binary, output)?, output),
-        WideStats => print_wide_stats(decode(file, binary, output)?, output),
-    }?;
+        Detect => {
+            let result = decode::<TaskDetect>(file, binary)?;
+
+            if output > Output::Quiet {
+                if result.has_cpuid() {
+                    println!("Warning: CPUID usage detected, features could switch in runtime");
+                }
+
+                print!("Features: ");
+            }
+
+            print_detect(result.into_result())?;
+        }
+        Stats => {
+            let result = decode::<TaskCount>(file, binary)?;
+
+            if output > Output::Quiet {
+                println!("----------");
+            }
+
+            print_records(result.into_result())?;
+        }
+        Details => {
+            let (features, registers) = decode::<TaskDetail>(file, binary)?.into_result();
+
+            if output > Output::Quiet {
+                println!();
+                print_header("Instructions");
+            }
+
+            print_features(features)?;
+
+            if output > Output::Quiet {
+                print_header("Registers");
+            }
+
+            print_records(registers)?;
+        }
+    };
 
     Ok(false)
 }

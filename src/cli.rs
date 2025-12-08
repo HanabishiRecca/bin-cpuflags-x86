@@ -10,7 +10,6 @@ pub enum Mode {
     Detect,
     Stats,
     Details,
-    WideStats,
 }
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
@@ -116,7 +115,6 @@ pub fn read_args(mut args: impl Iterator<Item = impl AsRef<str>>) -> Result<Opti
                     "detect" => Detect,
                     "stats" => Stats,
                     "details" => Details,
-                    "widestats" => WideStats,
                     _ => E!(InvalidValue(F!(arg), F!(value))),
                 });
             }
@@ -125,9 +123,6 @@ pub fn read_args(mut args: impl Iterator<Item = impl AsRef<str>>) -> Result<Opti
             }
             "-d" | "--details" => {
                 config.mode = Some(Mode::Details);
-            }
-            "-w" | "--widestats" => {
-                config.mode = Some(Mode::WideStats);
             }
 
             "--output" => {
