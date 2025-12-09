@@ -6,7 +6,7 @@ mod types;
 use crate::{
     binary::{Binary, Segment},
     cli::{Mode, Output},
-    decoder::{Decoder, Record, RecordF, Task, TaskCount, TaskDetail, TaskDetect},
+    decoder::{Decoder, Record, RecordF, Task, TaskCount, TaskDetail},
     types::Arr,
 };
 use std::{
@@ -89,6 +89,14 @@ fn print_header(text: &str) {
     println!("{:-<len$}", "");
     println!("{text:^len$}");
     println!("{:-<len$}", "");
+}
+
+fn print_cpuid() {
+    println!("Warning: CPUID usage detected, features could switch in runtime");
+}
+
+fn print_stats_note() {
+    println!("Note: some instructions belong to multiple feature sets so counters may overlap.");
 }
 
 fn parse(file: &File, output: Output) -> Result<Binary> {
@@ -200,11 +208,11 @@ fn run() -> Result<bool> {
     use Mode::*;
     match mode {
         Detect => {
-            let result = decode::<TaskDetect>(file, binary)?;
+            let result = decode::<TaskCount>(file, binary)?;
 
             if output > Output::Quiet {
                 if result.has_cpuid() {
-                    println!("Warning: CPUID usage detected, features could switch in runtime");
+                    print_cpuid();
                 }
 
                 print!("Features: ");
@@ -217,6 +225,7 @@ fn run() -> Result<bool> {
 
             if output > Output::Quiet {
                 println!("----------");
+                print_stats_note();
             }
 
             print_records(result.into_result())?;
@@ -227,6 +236,7 @@ fn run() -> Result<bool> {
             if output > Output::Quiet {
                 println!();
                 print_header("Instructions");
+                print_stats_note();
             }
 
             print_features(features)?;

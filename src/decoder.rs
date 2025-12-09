@@ -47,41 +47,14 @@ pub trait Task {
     fn into_result(self) -> Self::Result;
 }
 
-pub struct TaskDetect {
+pub struct TaskCount {
     features: Arr<u64>,
 }
 
-impl TaskDetect {
+impl TaskCount {
     pub fn has_cpuid(&self) -> bool {
         self.features[CpuidFeature::CPUID as usize] > 0
     }
-}
-
-impl Task for TaskDetect {
-    type Result = Arr<Record>;
-
-    fn new() -> Self {
-        let features = Arr::from(vec![0; FEATURE_COUNT]);
-        Self { features }
-    }
-
-    fn add(&mut self, instruction: Instruction) {
-        if instruction.is_invalid() {
-            return;
-        }
-
-        for id in instruction.cpuid_features() {
-            self.features[*id as usize] += 1;
-        }
-    }
-
-    fn into_result(self) -> Self::Result {
-        Record::map_from(self.features, &strings::FEATURE)
-    }
-}
-
-pub struct TaskCount {
-    features: Arr<u64>,
 }
 
 impl Task for TaskCount {
@@ -97,7 +70,9 @@ impl Task for TaskCount {
             return;
         }
 
-        self.features[instruction.cpuid_features()[0] as usize] += 1;
+        for id in instruction.cpuid_features() {
+            self.features[*id as usize] += 1;
+        }
     }
 
     fn into_result(self) -> Self::Result {
@@ -180,8 +155,11 @@ impl Task for TaskDetail {
             return;
         }
 
-        let feature = &mut self.features[instruction.cpuid_features()[0] as usize];
-        feature.add(instruction.mnemonic() as usize);
+        let mnemonic = instruction.mnemonic() as usize;
+
+        for id in instruction.cpuid_features() {
+            self.features[*id as usize].add(mnemonic);
+        }
 
         for op in 0..4 {
             let register = instruction.op_register(op);
