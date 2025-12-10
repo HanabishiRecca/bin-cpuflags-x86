@@ -7,13 +7,11 @@ use crate::{
     binary::Segment,
     cli::{Mode, Output},
     decoder::{Counter, Decoder, DetailCounter, FeatureCounter, Task, TaskCount, TaskDetail},
-    types::Arr,
 };
 use std::{
-    cmp::Reverse,
     env, error, fmt,
     fs::File,
-    io::{self, Write},
+    io::{self, StdoutLock, Write},
     process::ExitCode,
     result,
 };
@@ -75,7 +73,7 @@ fn print_help() {
     );
 }
 
-fn print_section(segment: &Segment) {
+fn print_segment(segment: &Segment) {
     println!(
         "    {} => 0x{:x}, {} bytes",
         segment.name().unwrap_or_default(),
@@ -101,7 +99,7 @@ fn print_stats_note() {
     println!("Note: instructions that belong to multiple feature sets make counters overlap.");
 }
 
-fn decode<T: Task>(mut file: File, bitness: u32, segments: &[Segment]) -> Result<T> {
+fn decode<T: Task>(mut file: File, bitness: u32, segments: &[Segment]) -> io::Result<T> {
     let mut decoder = Decoder::new(bitness);
 
     for segment in segments {
@@ -111,7 +109,7 @@ fn decode<T: Task>(mut file: File, bitness: u32, segments: &[Segment]) -> Result
     Ok(decoder.into_task())
 }
 
-fn print_features(features: Arr<FeatureCounter>) -> io::Result<()> {
+fn print_features(features: &[FeatureCounter]) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
 
     for feature in features {
@@ -121,30 +119,30 @@ fn print_features(features: Arr<FeatureCounter>) -> io::Result<()> {
     writeln!(stdout)
 }
 
-fn print_counters(mut counters: Arr<impl Counter>) -> io::Result<()> {
-    counters.sort_unstable_by_key(|counter| Reverse(counter.count()));
-
+fn print_counters(
+    counters: &[impl Counter], stdout: &mut StdoutLock, total: u64, tab: usize,
+) -> io::Result<()> {
     let nlen = counters.iter().map(Counter::name).map(str::len).max().unwrap_or(0);
-    let total: u64 = counters.iter().map(Counter::count).sum();
-
-    let mut stdout = io::stdout().lock();
-    writeln!(stdout, "{:nlen$} {total}", "=")?;
 
     for counter in counters {
         let count = counter.count();
         let ratio = (count as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{:nlen$} {count} ({ratio:.2}%)", counter.name())?;
+        writeln!(stdout, "{:tab$}{:nlen$} {count} ({ratio:.2}%)", "", counter.name())?;
     }
 
     writeln!(stdout)
 }
 
-fn print_details(mut details: Arr<DetailCounter>) -> io::Result<()> {
-    details.sort_unstable_by_key(|detail| Reverse(detail.count()));
+fn print_stats(counters: &[impl Counter]) -> io::Result<()> {
+    let total: u64 = counters.iter().map(Counter::count).sum();
+    let stdout = &mut io::stdout().lock();
+    writeln!(stdout, "= {total}")?;
+    print_counters(counters, stdout, total, 0)
+}
 
+fn print_details(details: &[DetailCounter]) -> io::Result<()> {
     let total: u64 = details.iter().map(DetailCounter::count).sum();
-
-    let mut stdout = io::stdout().lock();
+    let stdout = &mut io::stdout().lock();
     writeln!(stdout, "= {total}")?;
     writeln!(stdout)?;
 
@@ -152,22 +150,55 @@ fn print_details(mut details: Arr<DetailCounter>) -> io::Result<()> {
         let count = detail.count();
         let ratio = (count as f64 / total as f64) * 100.0;
         writeln!(stdout, "{} {count} ({ratio:.2}%)", detail.name())?;
-
-        let mut mnemonics = detail.into_mnemonics();
-        mnemonics.sort_unstable_by_key(|mnemonic| Reverse(mnemonic.count()));
-
-        let nlen = mnemonics.iter().map(Counter::name).map(str::len).max().unwrap_or(0);
-
-        for mnemonic in mnemonics {
-            let count = mnemonic.count();
-            let ratio = (count as f64 / total as f64) * 100.0;
-            writeln!(stdout, "    {:nlen$} {count} ({ratio:.2}%)", mnemonic.name())?;
-        }
-
-        writeln!(stdout)?;
+        print_counters(detail.mnemonics(), stdout, total, 4)?;
     }
 
     Ok(())
+}
+
+fn run_detect(file: File, bitness: u32, segments: &[Segment], output: Output) -> io::Result<()> {
+    let features = decode::<TaskCount>(file, bitness, segments)?.into_result();
+
+    if output > Output::Quiet {
+        detect_cpuid(&features);
+        print!("Features: ");
+    }
+
+    print_features(&features)
+}
+
+fn run_stats(file: File, bitness: u32, segments: &[Segment], output: Output) -> io::Result<()> {
+    let mut stats = decode::<TaskCount>(file, bitness, segments)?.into_result();
+    Counter::sort(&mut stats);
+
+    if output > Output::Quiet {
+        println!("----------");
+        print_stats_note();
+    }
+
+    print_stats(&stats)
+}
+
+fn run_details(file: File, bitness: u32, segments: &[Segment], output: Output) -> io::Result<()> {
+    let (mut features, mut registers) =
+        decode::<TaskDetail>(file, bitness, segments)?.into_result();
+
+    DetailCounter::sort(&mut features);
+    Counter::sort(&mut registers);
+
+    if output > Output::Quiet {
+        println!();
+        print_header("Instructions");
+        print_stats_note();
+    }
+
+    print_details(&features)?;
+
+    if output > Output::Quiet {
+        print_header("Registers");
+    }
+
+    print_stats(&registers)
 }
 
 fn run() -> Result<bool> {
@@ -202,50 +233,15 @@ fn run() -> Result<bool> {
 
     if output > Output::Normal {
         println!("Text sections:");
-        segments.iter().for_each(print_section);
+        segments.iter().for_each(print_segment);
     }
 
     use Mode::*;
     match mode {
-        Detect => {
-            let features = decode::<TaskCount>(file, bitness, segments)?.into_result();
-
-            if output > Output::Quiet {
-                detect_cpuid(&features);
-                print!("Features: ");
-            }
-
-            print_features(features)?;
-        }
-        Stats => {
-            let stats = decode::<TaskCount>(file, bitness, segments)?.into_result();
-
-            if output > Output::Quiet {
-                println!("----------");
-                print_stats_note();
-            }
-
-            print_counters(stats)?;
-        }
-        Details => {
-            let (features, registers) =
-                decode::<TaskDetail>(file, bitness, segments)?.into_result();
-
-            if output > Output::Quiet {
-                println!();
-                print_header("Instructions");
-                print_stats_note();
-            }
-
-            print_details(features)?;
-
-            if output > Output::Quiet {
-                print_header("Registers");
-            }
-
-            print_counters(registers)?;
-        }
-    };
+        Detect => run_detect(file, bitness, segments, output),
+        Stats => run_stats(file, bitness, segments, output),
+        Details => run_details(file, bitness, segments, output),
+    }?;
 
     Ok(false)
 }

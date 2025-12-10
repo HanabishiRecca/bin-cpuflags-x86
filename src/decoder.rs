@@ -3,6 +3,7 @@ mod strings;
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder as Iced, DecoderOptions, Instruction};
 use std::{
+    cmp::Reverse,
     fs::File,
     io::{BufRead, BufReader, Result, Seek, SeekFrom},
 };
@@ -16,9 +17,13 @@ const REGISTER_ENUM_COUNT: usize = 256;
 
 const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
 
-pub trait Counter {
+pub trait Counter: Sized {
     fn name(&self) -> &'static str;
     fn count(&self) -> u64;
+
+    fn sort(counters: &mut [Self]) {
+        counters.sort_unstable_by_key(|counter| Reverse(counter.count()));
+    }
 }
 
 trait DataMapper<T>: Sized {
@@ -117,8 +122,16 @@ pub struct DetailCounter {
 }
 
 impl DetailCounter {
-    pub fn into_mnemonics(self) -> Arr<MnemonicCounter> {
-        self.mnemonics
+    pub fn mnemonics(&self) -> &[MnemonicCounter] {
+        &self.mnemonics
+    }
+
+    pub fn sort(details: &mut [Self]) {
+        Counter::sort(details);
+
+        for detail in details {
+            Counter::sort(&mut detail.mnemonics);
+        }
     }
 }
 
