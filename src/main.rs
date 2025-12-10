@@ -4,9 +4,9 @@ mod decoder;
 mod types;
 
 use crate::{
-    binary::{Binary, Segment},
+    binary::Segment,
     cli::{Mode, Output},
-    decoder::{Decoder, Record, RecordF, Task, TaskCount, TaskDetail},
+    decoder::{Counter, Decoder, DetailCounter, FeatureCounter, Task, TaskCount, TaskDetail},
     types::Arr,
 };
 use std::{
@@ -91,44 +91,27 @@ fn print_header(text: &str) {
     println!("{:-<len$}", "");
 }
 
-fn print_cpuid() {
-    println!("Warning: CPUID usage detected, features could switch in runtime");
+fn detect_cpuid(features: &[FeatureCounter]) {
+    if features.iter().any(FeatureCounter::is_cpuid) {
+        println!("Warning: CPUID usage detected, features could switch in runtime.");
+    }
 }
 
 fn print_stats_note() {
-    println!("Note: some instructions belong to multiple feature sets so counters may overlap.");
+    println!("Note: instructions that belong to multiple feature sets make counters overlap.");
 }
 
-fn parse(file: &File, output: Output) -> Result<Binary> {
-    let binary = binary::parse(file)?;
+fn decode<T: Task>(mut file: File, bitness: u32, segments: &[Segment]) -> Result<T> {
+    let mut decoder = Decoder::new(bitness);
 
-    if output > Output::Quiet {
-        println!("Format: {:?}", binary.format());
-        println!("Architecture: {:?}", binary.architecture());
-    }
-
-    let sections = binary.segments();
-    test!(sections.is_empty(), NoText);
-
-    if output > Output::Normal {
-        println!("Text sections: ");
-        sections.iter().for_each(print_section);
-    }
-
-    Ok(binary)
-}
-
-fn decode<T: Task>(mut file: File, binary: Binary) -> Result<T> {
-    let mut decoder = Decoder::new(or!(binary.bitness(), WrongArch));
-
-    for segment in binary.segments() {
+    for segment in segments {
         decoder.read(&mut file, segment.offset(), segment.size())?;
     }
 
     Ok(decoder.into_task())
 }
 
-fn print_detect(features: Arr<Record>) -> io::Result<()> {
+fn print_features(features: Arr<FeatureCounter>) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
 
     for feature in features {
@@ -138,44 +121,47 @@ fn print_detect(features: Arr<Record>) -> io::Result<()> {
     writeln!(stdout)
 }
 
-fn print_records(mut records: Arr<Record>) -> io::Result<()> {
-    records.sort_unstable_by_key(|feature| Reverse(feature.count()));
+fn print_counters(mut counters: Arr<impl Counter>) -> io::Result<()> {
+    counters.sort_unstable_by_key(|counter| Reverse(counter.count()));
 
-    let nlen = records.iter().map(Record::name).map(str::len).max().unwrap_or(0);
-    let total: u64 = records.iter().map(Record::count).sum();
+    let nlen = counters.iter().map(Counter::name).map(str::len).max().unwrap_or(0);
+    let total: u64 = counters.iter().map(Counter::count).sum();
 
     let mut stdout = io::stdout().lock();
     writeln!(stdout, "{:nlen$} {total}", "=")?;
 
-    for register in records {
-        let ratio = (register.count() as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{:nlen$} {} ({ratio:.2}%)", register.name(), register.count())?;
+    for counter in counters {
+        let count = counter.count();
+        let ratio = (count as f64 / total as f64) * 100.0;
+        writeln!(stdout, "{:nlen$} {count} ({ratio:.2}%)", counter.name())?;
     }
 
     writeln!(stdout)
 }
 
-fn print_features(mut features: Arr<RecordF>) -> io::Result<()> {
-    features.sort_unstable_by_key(|feature| Reverse(feature.count()));
+fn print_details(mut details: Arr<DetailCounter>) -> io::Result<()> {
+    details.sort_unstable_by_key(|detail| Reverse(detail.count()));
 
-    let total: u64 = features.iter().map(RecordF::count).sum();
+    let total: u64 = details.iter().map(DetailCounter::count).sum();
 
     let mut stdout = io::stdout().lock();
     writeln!(stdout, "= {total}")?;
     writeln!(stdout)?;
 
-    for feature in features {
-        let ratio = (feature.count() as f64 / total as f64) * 100.0;
-        writeln!(stdout, "{} {} ({ratio:.2}%)", feature.name(), feature.count())?;
+    for detail in details {
+        let count = detail.count();
+        let ratio = (count as f64 / total as f64) * 100.0;
+        writeln!(stdout, "{} {count} ({ratio:.2}%)", detail.name())?;
 
-        let mut mnemonics = feature.into_mnemonics();
+        let mut mnemonics = detail.into_mnemonics();
         mnemonics.sort_unstable_by_key(|mnemonic| Reverse(mnemonic.count()));
 
-        let nlen = mnemonics.iter().map(Record::name).map(str::len).max().unwrap_or(0);
+        let nlen = mnemonics.iter().map(Counter::name).map(str::len).max().unwrap_or(0);
 
         for mnemonic in mnemonics {
-            let ratio = (mnemonic.count() as f64 / total as f64) * 100.0;
-            writeln!(stdout, "    {:nlen$} {} ({ratio:.2}%)", mnemonic.name(), mnemonic.count())?;
+            let count = mnemonic.count();
+            let ratio = (count as f64 / total as f64) * 100.0;
+            writeln!(stdout, "    {:nlen$} {count} ({ratio:.2}%)", mnemonic.name())?;
         }
 
         writeln!(stdout)?;
@@ -203,35 +189,47 @@ fn run() -> Result<bool> {
     let file = File::open(file_path)?;
     test!(file.metadata()?.file_type().is_dir(), WrongTarget);
 
-    let binary = parse(&file, output)?;
+    let binary = binary::parse(&file)?;
+
+    if output > Output::Quiet {
+        println!("Format: {:?}", binary.format());
+        println!("Architecture: {:?}", binary.architecture());
+    }
+
+    let bitness = or!(binary.bitness(), WrongArch);
+    let segments = binary.segments();
+    test!(segments.is_empty(), NoText);
+
+    if output > Output::Normal {
+        println!("Text sections:");
+        segments.iter().for_each(print_section);
+    }
 
     use Mode::*;
     match mode {
         Detect => {
-            let result = decode::<TaskCount>(file, binary)?;
+            let features = decode::<TaskCount>(file, bitness, segments)?.into_result();
 
             if output > Output::Quiet {
-                if result.has_cpuid() {
-                    print_cpuid();
-                }
-
+                detect_cpuid(&features);
                 print!("Features: ");
             }
 
-            print_detect(result.into_result())?;
+            print_features(features)?;
         }
         Stats => {
-            let result = decode::<TaskCount>(file, binary)?;
+            let stats = decode::<TaskCount>(file, bitness, segments)?.into_result();
 
             if output > Output::Quiet {
                 println!("----------");
                 print_stats_note();
             }
 
-            print_records(result.into_result())?;
+            print_counters(stats)?;
         }
         Details => {
-            let (features, registers) = decode::<TaskDetail>(file, binary)?.into_result();
+            let (features, registers) =
+                decode::<TaskDetail>(file, bitness, segments)?.into_result();
 
             if output > Output::Quiet {
                 println!();
@@ -239,13 +237,13 @@ fn run() -> Result<bool> {
                 print_stats_note();
             }
 
-            print_features(features)?;
+            print_details(features)?;
 
             if output > Output::Quiet {
                 print_header("Registers");
             }
 
-            print_records(registers)?;
+            print_counters(registers)?;
         }
     };
 

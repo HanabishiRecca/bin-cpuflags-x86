@@ -1,7 +1,7 @@
 mod strings;
 
 use crate::types::Arr;
-use iced_x86::{CpuidFeature, Decoder as Iced, DecoderOptions, Instruction, Register};
+use iced_x86::{CpuidFeature, Decoder as Iced, DecoderOptions, Instruction};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Result, Seek, SeekFrom},
@@ -16,67 +16,73 @@ const REGISTER_ENUM_COUNT: usize = 256;
 
 const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
 
-pub struct Record {
-    name: &'static str,
+pub trait Counter {
+    fn name(&self) -> &'static str;
+    fn count(&self) -> u64;
+}
+
+trait DataMapper<T>: Sized {
+    fn filter(_: &(usize, T)) -> bool;
+    fn map(_: (usize, T)) -> Self;
+
+    fn map_data(input: Arr<T>) -> Arr<Self> {
+        input.into_iter().enumerate().filter(Self::filter).map(Self::map).collect()
+    }
+}
+
+pub struct FeatureCounter {
+    id: usize,
     count: u64,
 }
 
-impl Record {
-    fn filter((_, count): &(usize, u64)) -> bool {
-        *count > 0
+impl FeatureCounter {
+    pub fn is_cpuid(&self) -> bool {
+        self.id == CpuidFeature::CPUID as usize
+    }
+}
+
+impl Counter for FeatureCounter {
+    fn name(&self) -> &'static str {
+        strings::FEATURE[self.id]
     }
 
-    fn map_from(input: Arr<u64>, names: &[&'static str]) -> Arr<Self> {
-        let map = |(id, count): (usize, u64)| Self { name: names[id], count };
-        input.into_iter().enumerate().filter(Record::filter).map(map).collect()
-    }
-
-    pub fn name(&self) -> &'static str {
-        self.name
-    }
-
-    pub fn count(&self) -> u64 {
+    fn count(&self) -> u64 {
         self.count
     }
 }
 
-pub trait Task {
-    type Result;
-    fn new() -> Self;
-    fn add(&mut self, instruction: Instruction);
-    fn into_result(self) -> Self::Result;
-}
+impl DataMapper<u64> for FeatureCounter {
+    fn filter((_, count): &(usize, u64)) -> bool {
+        *count > 0
+    }
 
-pub struct TaskCount {
-    features: Arr<u64>,
-}
-
-impl TaskCount {
-    pub fn has_cpuid(&self) -> bool {
-        self.features[CpuidFeature::CPUID as usize] > 0
+    fn map((id, count): (usize, u64)) -> Self {
+        Self { id, count }
     }
 }
 
-impl Task for TaskCount {
-    type Result = Arr<Record>;
+pub struct MnemonicCounter {
+    id: usize,
+    count: u64,
+}
 
-    fn new() -> Self {
-        let features = Arr::from(vec![0; FEATURE_COUNT]);
-        Self { features }
+impl Counter for MnemonicCounter {
+    fn name(&self) -> &'static str {
+        strings::MNEMONIC[self.id]
     }
 
-    fn add(&mut self, instruction: Instruction) {
-        if instruction.is_invalid() {
-            return;
-        }
+    fn count(&self) -> u64 {
+        self.count
+    }
+}
 
-        for id in instruction.cpuid_features() {
-            self.features[*id as usize] += 1;
-        }
+impl DataMapper<u64> for MnemonicCounter {
+    fn filter((_, count): &(usize, u64)) -> bool {
+        *count > 0
     }
 
-    fn into_result(self) -> Self::Result {
-        Record::map_from(self.features, &strings::FEATURE)
+    fn map((id, count): (usize, u64)) -> Self {
+        Self { id, count }
     }
 }
 
@@ -95,44 +101,101 @@ impl Feature {
         self.mnemonics[mnemonic] += 1;
     }
 
-    fn into_mnemonics(self) -> Arr<Record> {
-        Record::map_from(self.mnemonics, &strings::MNEMONIC)
-    }
-}
-
-pub struct RecordF {
-    name: &'static str,
-    count: u64,
-    mnemonics: Arr<Record>,
-}
-
-impl RecordF {
-    fn map((id, feature): (usize, Feature)) -> Option<Self> {
-        if feature.count == 0 {
-            return None;
-        }
-
-        Some(Self {
-            name: strings::FEATURE[id],
-            count: feature.count,
-            mnemonics: feature.into_mnemonics(),
-        })
-    }
-
-    fn map_from(input: Arr<Feature>) -> Arr<Self> {
-        input.into_iter().enumerate().filter_map(Self::map).collect()
-    }
-
-    pub fn name(&self) -> &'static str {
-        self.name
-    }
-
-    pub fn count(&self) -> u64 {
+    fn count(&self) -> u64 {
         self.count
     }
 
-    pub fn into_mnemonics(self) -> Arr<Record> {
+    fn into_mnemonics(self) -> Arr<MnemonicCounter> {
+        MnemonicCounter::map_data(self.mnemonics)
+    }
+}
+
+pub struct DetailCounter {
+    id: usize,
+    count: u64,
+    mnemonics: Arr<MnemonicCounter>,
+}
+
+impl DetailCounter {
+    pub fn into_mnemonics(self) -> Arr<MnemonicCounter> {
         self.mnemonics
+    }
+}
+
+impl Counter for DetailCounter {
+    fn name(&self) -> &'static str {
+        strings::FEATURE[self.id]
+    }
+
+    fn count(&self) -> u64 {
+        self.count
+    }
+}
+
+impl DataMapper<Feature> for DetailCounter {
+    fn filter((_, feature): &(usize, Feature)) -> bool {
+        feature.count() > 0
+    }
+
+    fn map((id, feature): (usize, Feature)) -> Self {
+        Self { id, count: feature.count(), mnemonics: feature.into_mnemonics() }
+    }
+}
+
+pub struct RegisterCounter {
+    id: usize,
+    count: u64,
+}
+
+impl Counter for RegisterCounter {
+    fn name(&self) -> &'static str {
+        strings::REGISTER[self.id]
+    }
+
+    fn count(&self) -> u64 {
+        self.count
+    }
+}
+
+impl DataMapper<u64> for RegisterCounter {
+    fn filter((_, count): &(usize, u64)) -> bool {
+        *count > 0
+    }
+
+    fn map((id, count): (usize, u64)) -> Self {
+        Self { id, count }
+    }
+}
+
+pub trait Task {
+    fn new() -> Self;
+    fn add(&mut self, instruction: Instruction);
+}
+
+pub struct TaskCount {
+    features: Arr<u64>,
+}
+
+impl TaskCount {
+    pub fn into_result(self) -> Arr<FeatureCounter> {
+        FeatureCounter::map_data(self.features)
+    }
+}
+
+impl Task for TaskCount {
+    fn new() -> Self {
+        let features = Arr::from(vec![0; FEATURE_COUNT]);
+        Self { features }
+    }
+
+    fn add(&mut self, instruction: Instruction) {
+        if instruction.is_invalid() {
+            return;
+        }
+
+        for id in instruction.cpuid_features() {
+            self.features[*id as usize] += 1;
+        }
     }
 }
 
@@ -141,9 +204,15 @@ pub struct TaskDetail {
     registers: Arr<u64>,
 }
 
-impl Task for TaskDetail {
-    type Result = (Arr<RecordF>, Arr<Record>);
+impl TaskDetail {
+    pub fn into_result(self) -> (Arr<DetailCounter>, Arr<RegisterCounter>) {
+        let features = DetailCounter::map_data(self.features);
+        let registers = RegisterCounter::map_data(self.registers);
+        (features, registers)
+    }
+}
 
+impl Task for TaskDetail {
     fn new() -> Self {
         let features = (0..FEATURE_COUNT).map(Feature::new).collect();
         let registers = Arr::from(vec![0; REGISTER_ENUM_COUNT]);
@@ -162,18 +231,12 @@ impl Task for TaskDetail {
         }
 
         for op in 0..4 {
-            let register = instruction.op_register(op);
+            let register = instruction.op_register(op) as usize;
 
-            if register != Register::None {
-                self.registers[register as usize] += 1;
+            if register > 0 {
+                self.registers[register] += 1;
             }
         }
-    }
-
-    fn into_result(self) -> Self::Result {
-        let features = RecordF::map_from(self.features);
-        let registers = Record::map_from(self.registers, &strings::REGISTER);
-        (features, registers)
     }
 }
 
