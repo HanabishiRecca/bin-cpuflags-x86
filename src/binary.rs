@@ -1,8 +1,9 @@
 use crate::types::{Arr, Str};
 use object::{
-    Architecture, BinaryFormat, File, Object, ObjectSection, ReadCache, ReadRef, Result, Section,
-    SectionKind,
+    Architecture, BinaryFormat, File, Object, ObjectSection, ReadCache, ReadRef,
+    Result as ObjResult, Section, SectionKind,
 };
+use std::fs::File as FsFile;
 
 pub struct Segment {
     name: Option<Str>,
@@ -34,9 +35,23 @@ pub struct Binary {
     segments: Arr<Segment>,
 }
 
+fn map_segment<'a>(section: Section<'a, 'a, impl ReadRef<'a>>) -> Option<Segment> {
+    (section.kind() == SectionKind::Text).then_some(())?;
+    let (offset, size) = section.file_range()?;
+    let name = section.name().ok().map(Str::from);
+    Some(Segment::new(name, offset, size))
+}
+
 impl Binary {
-    pub fn new(format: BinaryFormat, architecture: Architecture, segments: Arr<Segment>) -> Self {
+    fn new(format: BinaryFormat, architecture: Architecture, segments: Arr<Segment>) -> Self {
         Self { format, architecture, segments }
+    }
+
+    pub fn parse(file: &FsFile) -> ObjResult<Self> {
+        let cache = ReadCache::new(file);
+        let binary = File::parse(&cache)?;
+        let segments = binary.sections().filter_map(map_segment).collect();
+        Ok(Self::new(binary.format(), binary.architecture(), segments))
     }
 
     pub fn format(&self) -> BinaryFormat {
@@ -59,18 +74,4 @@ impl Binary {
     pub fn segments(&self) -> &[Segment] {
         &self.segments
     }
-}
-
-fn map_segment<'a>(section: Section<'a, 'a, impl ReadRef<'a>>) -> Option<Segment> {
-    (section.kind() == SectionKind::Text).then_some(())?;
-    let (offset, size) = section.file_range()?;
-    let name = section.name().ok().map(Str::from);
-    Some(Segment::new(name, offset, size))
-}
-
-pub fn parse(file: &std::fs::File) -> Result<Binary> {
-    let cache = ReadCache::new(file);
-    let binary = File::parse(&cache)?;
-    let segments = binary.sections().filter_map(map_segment).collect();
-    Ok(Binary::new(binary.format(), binary.architecture(), segments))
 }

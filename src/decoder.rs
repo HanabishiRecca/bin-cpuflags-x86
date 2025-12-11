@@ -2,11 +2,7 @@ mod strings;
 
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder as Iced, DecoderOptions, Instruction};
-use std::{
-    cmp::Reverse,
-    fs::File,
-    io::{BufRead, BufReader, Result, Seek, SeekFrom},
-};
+use std::cmp::Reverse;
 
 /// Keep in sync with `IcedConstants::CPUID_FEATURE_ENUM_COUNT`!
 const FEATURE_COUNT: usize = 178;
@@ -125,14 +121,6 @@ impl DetailCounter {
     pub fn mnemonics(&self) -> &[MnemonicCounter] {
         &self.mnemonics
     }
-
-    pub fn sort(details: &mut [Self]) {
-        Counter::sort(details);
-
-        for detail in details {
-            Counter::sort(&mut detail.mnemonics);
-        }
-    }
 }
 
 impl Counter for DetailCounter {
@@ -142,6 +130,14 @@ impl Counter for DetailCounter {
 
     fn count(&self) -> u64 {
         self.count
+    }
+
+    fn sort(details: &mut [Self]) {
+        details.sort_unstable_by_key(|detail| Reverse(detail.count()));
+
+        for detail in details {
+            MnemonicCounter::sort(&mut detail.mnemonics);
+        }
     }
 }
 
@@ -181,21 +177,19 @@ impl DataMapper<u64> for RegisterCounter {
 }
 
 pub trait Task {
+    type Result;
     fn new() -> Self;
     fn add(&mut self, instruction: Instruction);
+    fn into_result(self) -> Self::Result;
 }
 
 pub struct TaskCount {
     features: Arr<u64>,
 }
 
-impl TaskCount {
-    pub fn into_result(self) -> Arr<FeatureCounter> {
-        FeatureCounter::map_data(self.features)
-    }
-}
-
 impl Task for TaskCount {
+    type Result = Arr<FeatureCounter>;
+
     fn new() -> Self {
         let features = Arr::from(vec![0; FEATURE_COUNT]);
         Self { features }
@@ -210,6 +204,10 @@ impl Task for TaskCount {
             self.features[*id as usize] += 1;
         }
     }
+
+    fn into_result(self) -> Self::Result {
+        FeatureCounter::map_data(self.features)
+    }
 }
 
 pub struct TaskDetail {
@@ -217,15 +215,9 @@ pub struct TaskDetail {
     registers: Arr<u64>,
 }
 
-impl TaskDetail {
-    pub fn into_result(self) -> (Arr<DetailCounter>, Arr<RegisterCounter>) {
-        let features = DetailCounter::map_data(self.features);
-        let registers = RegisterCounter::map_data(self.registers);
-        (features, registers)
-    }
-}
-
 impl Task for TaskDetail {
+    type Result = (Arr<DetailCounter>, Arr<RegisterCounter>);
+
     fn new() -> Self {
         let features = (0..FEATURE_COUNT).map(Feature::new).collect();
         let registers = Arr::from(vec![0; REGISTER_ENUM_COUNT]);
@@ -251,6 +243,12 @@ impl Task for TaskDetail {
             }
         }
     }
+
+    fn into_result(self) -> Self::Result {
+        let features = DetailCounter::map_data(self.features);
+        let registers = RegisterCounter::map_data(self.registers);
+        (features, registers)
+    }
 }
 
 pub struct Decoder<T: Task> {
@@ -263,20 +261,15 @@ impl<T: Task> Decoder<T> {
         Self { bitness, task: T::new() }
     }
 
-    pub fn read(&mut self, file: &mut File, offset: u64, size: u64) -> Result<()> {
-        file.seek(SeekFrom::Start(offset))?;
-
-        let mut reader = BufReader::with_capacity(size as usize, file);
-        let decoder = Iced::new(self.bitness, reader.fill_buf()?, OPTIONS);
+    pub fn read(&mut self, data: &[u8]) {
+        let decoder = Iced::new(self.bitness, data, OPTIONS);
 
         for instruction in decoder {
             self.task.add(instruction);
         }
-
-        Ok(())
     }
 
-    pub fn into_task(self) -> T {
-        self.task
+    pub fn into_result(self) -> T::Result {
+        self.task.into_result()
     }
 }

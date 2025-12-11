@@ -2,7 +2,8 @@
 mod tests;
 
 use crate::types::Str;
-use std::{error, fmt, result};
+use std::error::Error;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
@@ -43,17 +44,17 @@ impl Config {
 }
 
 #[derive(Debug)]
-pub enum Error {
+pub enum CliError {
     NoValue(Str),
     InvalidValue(Str, Str),
     Unknown(Str),
 }
 
-impl error::Error for Error {}
+impl Error for CliError {}
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Error::*;
+impl Display for CliError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        use CliError::*;
         match self {
             NoValue(arg) => write!(f, "Option '{arg}' requires a value"),
             InvalidValue(arg, value) => write!(f, "Invalid value '{value}' for option '{arg}'"),
@@ -62,11 +63,9 @@ impl fmt::Display for Error {
     }
 }
 
-type Result<T> = result::Result<T, Error>;
-
 macro_rules! E {
     ($e: expr) => {{
-        use Error::*;
+        use CliError::*;
         return Err($e);
     }};
 }
@@ -77,7 +76,9 @@ macro_rules! F {
     };
 }
 
-pub fn read_args(mut args: impl Iterator<Item = impl AsRef<str>>) -> Result<Option<Config>> {
+pub fn read_args(
+    mut args: impl Iterator<Item = impl AsRef<str>>,
+) -> Result<Option<Config>, CliError> {
     let mut config = Config::default();
     let mut escape = false;
 

@@ -55,15 +55,15 @@ macro_rules! test_error {
 
 #[test]
 fn no_value() {
-    test_error!(["--mode"], Error::NoValue(_));
+    test_error!(["--mode"], CliError::NoValue(_));
 }
 
 #[test]
 fn invalid_value() {
-    test_error!(["--mode", "foo"], Error::InvalidValue(..));
+    test_error!(["--mode", "foo"], CliError::InvalidValue(..));
 }
 
 #[test]
 fn unknown_arg() {
-    test_error!(["--foo"], Error::Unknown(_));
+    test_error!(["--foo"], CliError::Unknown(_));
 }
