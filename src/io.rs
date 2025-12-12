@@ -22,8 +22,10 @@ impl File {
         Ok(self.file.metadata()?.file_type().is_dir())
     }
 
-    pub fn decode<T: Task>(&self, bitness: u32, segments: &[Segment]) -> IoResult<T::Result> {
-        let mut decoder = Decoder::<T>::new(bitness);
+    pub fn decode<T: Task>(
+        &self, task: T, bitness: u32, segments: &[Segment],
+    ) -> IoResult<T::Result> {
+        let mut decoder = Decoder::new(bitness, task);
 
         for segment in segments {
             self.fs_file().seek(SeekFrom::Start(segment.offset()))?;

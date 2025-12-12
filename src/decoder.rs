@@ -2,7 +2,7 @@ mod strings;
 
 use crate::types::Arr;
 use iced_x86::{CpuidFeature, Decoder as Iced, DecoderOptions, Instruction};
-use std::cmp::Reverse;
+use std::{cmp::Reverse, marker::PhantomData};
 
 /// Keep in sync with `IcedConstants::CPUID_FEATURE_ENUM_COUNT`!
 const FEATURE_COUNT: usize = 178;
@@ -13,38 +13,69 @@ const REGISTER_ENUM_COUNT: usize = 256;
 
 const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
 
-pub trait Counter: Sized {
+pub trait Item: Sized {
     fn name(&self) -> &'static str;
     fn count(&self) -> u64;
+    fn sort(&mut self) {}
 
-    fn sort(counters: &mut [Self]) {
-        counters.sort_unstable_by_key(|counter| Reverse(counter.count()));
+    fn sort_list(items: &mut [Self]) {
+        items.sort_unstable_by_key(|counter| Reverse(counter.count()));
+        items.iter_mut().for_each(Self::sort);
     }
 }
 
-trait DataMapper<T>: Sized {
+trait Map<T>: Item {
     fn filter(_: &(usize, T)) -> bool;
     fn map(_: (usize, T)) -> Self;
 
-    fn map_data(input: Arr<T>) -> Arr<Self> {
-        input.into_iter().enumerate().filter(Self::filter).map(Self::map).collect()
+    fn map_items(items: Arr<T>) -> Arr<Self> {
+        items.into_iter().enumerate().filter(Self::filter).map(Self::map).collect()
     }
 }
 
-pub struct FeatureCounter {
-    id: usize,
-    count: u64,
+pub trait Name {
+    fn name(id: usize) -> &'static str;
 }
 
-impl FeatureCounter {
+pub struct Feature;
+
+impl Name for Feature {
+    fn name(id: usize) -> &'static str {
+        strings::FEATURE[id]
+    }
+}
+
+pub struct Mnemonic;
+
+impl Name for Mnemonic {
+    fn name(id: usize) -> &'static str {
+        strings::MNEMONIC[id]
+    }
+}
+
+pub struct Register;
+
+impl Name for Register {
+    fn name(id: usize) -> &'static str {
+        strings::REGISTER[id]
+    }
+}
+
+pub struct Count<T: Name> {
+    id: usize,
+    count: u64,
+    _name: PhantomData<T>,
+}
+
+impl Count<Feature> {
     pub fn is_cpuid(&self) -> bool {
         self.id == CpuidFeature::CPUID as usize
     }
 }
 
-impl Counter for FeatureCounter {
+impl<T: Name> Item for Count<T> {
     fn name(&self) -> &'static str {
-        strings::FEATURE[self.id]
+        T::name(self.id)
     }
 
     fn count(&self) -> u64 {
@@ -52,47 +83,22 @@ impl Counter for FeatureCounter {
     }
 }
 
-impl DataMapper<u64> for FeatureCounter {
+impl<T: Name> Map<u64> for Count<T> {
     fn filter((_, count): &(usize, u64)) -> bool {
         *count > 0
     }
 
     fn map((id, count): (usize, u64)) -> Self {
-        Self { id, count }
+        Self { id, count, _name: PhantomData }
     }
 }
 
-pub struct MnemonicCounter {
-    id: usize,
-    count: u64,
-}
-
-impl Counter for MnemonicCounter {
-    fn name(&self) -> &'static str {
-        strings::MNEMONIC[self.id]
-    }
-
-    fn count(&self) -> u64 {
-        self.count
-    }
-}
-
-impl DataMapper<u64> for MnemonicCounter {
-    fn filter((_, count): &(usize, u64)) -> bool {
-        *count > 0
-    }
-
-    fn map((id, count): (usize, u64)) -> Self {
-        Self { id, count }
-    }
-}
-
-struct Feature {
+struct DetailCounter {
     count: u64,
     mnemonics: Arr<u64>,
 }
 
-impl Feature {
+impl DetailCounter {
     fn new(_: usize) -> Self {
         Self { count: 0, mnemonics: Arr::from(vec![0; MNEMONIC_ENUM_COUNT]) }
     }
@@ -106,24 +112,24 @@ impl Feature {
         self.count
     }
 
-    fn into_mnemonics(self) -> Arr<MnemonicCounter> {
-        MnemonicCounter::map_data(self.mnemonics)
+    fn into_mnemonics(self) -> Arr<u64> {
+        self.mnemonics
     }
 }
 
-pub struct DetailCounter {
+pub struct Detail {
     id: usize,
     count: u64,
-    mnemonics: Arr<MnemonicCounter>,
+    mnemonics: Arr<Count<Mnemonic>>,
 }
 
-impl DetailCounter {
-    pub fn mnemonics(&self) -> &[MnemonicCounter] {
+impl Detail {
+    pub fn mnemonics(&self) -> &[Count<Mnemonic>] {
         &self.mnemonics
     }
 }
 
-impl Counter for DetailCounter {
+impl Item for Detail {
     fn name(&self) -> &'static str {
         strings::FEATURE[self.id]
     }
@@ -132,47 +138,20 @@ impl Counter for DetailCounter {
         self.count
     }
 
-    fn sort(details: &mut [Self]) {
-        details.sort_unstable_by_key(|detail| Reverse(detail.count()));
-
-        for detail in details {
-            MnemonicCounter::sort(&mut detail.mnemonics);
-        }
+    fn sort(&mut self) {
+        Item::sort_list(&mut self.mnemonics);
     }
 }
 
-impl DataMapper<Feature> for DetailCounter {
-    fn filter((_, feature): &(usize, Feature)) -> bool {
+impl Map<DetailCounter> for Detail {
+    fn filter((_, feature): &(usize, DetailCounter)) -> bool {
         feature.count() > 0
     }
 
-    fn map((id, feature): (usize, Feature)) -> Self {
-        Self { id, count: feature.count(), mnemonics: feature.into_mnemonics() }
-    }
-}
-
-pub struct RegisterCounter {
-    id: usize,
-    count: u64,
-}
-
-impl Counter for RegisterCounter {
-    fn name(&self) -> &'static str {
-        strings::REGISTER[self.id]
-    }
-
-    fn count(&self) -> u64 {
-        self.count
-    }
-}
-
-impl DataMapper<u64> for RegisterCounter {
-    fn filter((_, count): &(usize, u64)) -> bool {
-        *count > 0
-    }
-
-    fn map((id, count): (usize, u64)) -> Self {
-        Self { id, count }
+    fn map((id, feature): (usize, DetailCounter)) -> Self {
+        let count = feature.count();
+        let mnemonics = Count::map_items(feature.into_mnemonics());
+        Self { id, count, mnemonics }
     }
 }
 
@@ -188,7 +167,7 @@ pub struct TaskCount {
 }
 
 impl Task for TaskCount {
-    type Result = Arr<FeatureCounter>;
+    type Result = Arr<Count<Feature>>;
 
     fn new() -> Self {
         let features = Arr::from(vec![0; FEATURE_COUNT]);
@@ -206,20 +185,20 @@ impl Task for TaskCount {
     }
 
     fn into_result(self) -> Self::Result {
-        FeatureCounter::map_data(self.features)
+        Count::map_items(self.features)
     }
 }
 
 pub struct TaskDetail {
-    features: Arr<Feature>,
+    features: Arr<DetailCounter>,
     registers: Arr<u64>,
 }
 
 impl Task for TaskDetail {
-    type Result = (Arr<DetailCounter>, Arr<RegisterCounter>);
+    type Result = (Arr<Detail>, Arr<Count<Register>>);
 
     fn new() -> Self {
-        let features = (0..FEATURE_COUNT).map(Feature::new).collect();
+        let features = (0..FEATURE_COUNT).map(DetailCounter::new).collect();
         let registers = Arr::from(vec![0; REGISTER_ENUM_COUNT]);
         Self { features, registers }
     }
@@ -245,8 +224,8 @@ impl Task for TaskDetail {
     }
 
     fn into_result(self) -> Self::Result {
-        let features = DetailCounter::map_data(self.features);
-        let registers = RegisterCounter::map_data(self.registers);
+        let features = Detail::map_items(self.features);
+        let registers = Count::map_items(self.registers);
         (features, registers)
     }
 }
@@ -257,8 +236,8 @@ pub struct Decoder<T: Task> {
 }
 
 impl<T: Task> Decoder<T> {
-    pub fn new(bitness: u32) -> Self {
-        Self { bitness, task: T::new() }
+    pub fn new(bitness: u32, task: T) -> Self {
+        Self { bitness, task }
     }
 
     pub fn read(&mut self, data: &[u8]) {

@@ -71,7 +71,7 @@ impl Binary {
         }
     }
 
-    pub fn segments(&self) -> &[Segment] {
-        &self.segments
+    pub fn into_segments(self) -> Arr<Segment> {
+        self.segments
     }
 }

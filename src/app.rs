@@ -1,8 +1,9 @@
 use crate::binary::{Binary, Segment};
 use crate::cli::{Mode, Output};
-use crate::decoder::{Counter, TaskCount, TaskDetail};
+use crate::decoder::{Item, Task, TaskCount, TaskDetail};
 use crate::io::File;
 use crate::print;
+use crate::types::Arr;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::Result as IoResult;
@@ -43,47 +44,76 @@ macro_rules! test {
     };
 }
 
-fn run_detect(file: File, bitness: u32, segments: &[Segment], output: Output) -> IoResult<()> {
-    let features = file.decode::<TaskCount>(bitness, segments)?;
-
-    if output > Output::Quiet {
-        print::cpuid(&features);
-        print!("Features: ");
-    }
-
-    print::features(&features)
+struct App {
+    file: File,
+    bitness: u32,
+    segments: Arr<Segment>,
+    output: Output,
 }
 
-fn run_stats(file: File, bitness: u32, segments: &[Segment], output: Output) -> IoResult<()> {
-    let mut stats = file.decode::<TaskCount>(bitness, segments)?;
-    Counter::sort(&mut stats);
-
-    if output > Output::Quiet {
-        println!();
-        print::stats_note();
+impl App {
+    fn new(file: File, bitness: u32, segments: Arr<Segment>, output: Output) -> Self {
+        Self { file, bitness, segments, output }
     }
 
-    print::stats(&stats)
-}
-
-fn run_details(file: File, bitness: u32, segments: &[Segment], output: Output) -> IoResult<()> {
-    let (mut features, mut registers) = file.decode::<TaskDetail>(bitness, segments)?;
-    Counter::sort(&mut features);
-    Counter::sort(&mut registers);
-
-    if output > Output::Quiet {
-        println!();
-        print::header("Instructions");
-        print::stats_note();
+    fn exec<T: Task>(&self, task: T) -> IoResult<T::Result> {
+        self.file.decode(task, self.bitness, &self.segments)
     }
 
-    print::details(&features)?;
+    #[inline(never)]
+    fn detect(&self) -> IoResult<()> {
+        let features = self.exec(TaskCount::new())?;
 
-    if output > Output::Quiet {
-        print::header("Registers");
+        if self.output > Output::Quiet {
+            print::cpuid(&features);
+            print!("Features: ");
+        }
+
+        print::features(&features)
     }
 
-    print::stats(&registers)
+    #[inline(never)]
+    fn stats(&self) -> IoResult<()> {
+        let mut stats = self.exec(TaskCount::new())?;
+        Item::sort_list(&mut stats);
+
+        if self.output > Output::Quiet {
+            println!();
+            print::stats_note();
+        }
+
+        print::stats(&stats)
+    }
+
+    #[inline(never)]
+    fn details(&self) -> IoResult<()> {
+        let (mut details, mut registers) = self.exec(TaskDetail::new())?;
+        Item::sort_list(&mut details);
+        Item::sort_list(&mut registers);
+
+        if self.output > Output::Quiet {
+            println!();
+            print::header("Instructions");
+            print::stats_note();
+        }
+
+        print::details(&details)?;
+
+        if self.output > Output::Quiet {
+            print::header("Registers");
+        }
+
+        print::stats(&registers)
+    }
+
+    fn run(&self, mode: Mode) -> IoResult<()> {
+        use Mode::*;
+        match mode {
+            Detect => self.detect(),
+            Stats => self.stats(),
+            Details => self.details(),
+        }
+    }
 }
 
 pub fn run() -> Result<bool, Box<dyn Error>> {
@@ -95,7 +125,6 @@ pub fn run() -> Result<bool, Box<dyn Error>> {
         return Ok(true);
     };
 
-    let mode = config.mode().unwrap_or(DEFAULT_MODE);
     let output = config.output().unwrap_or(DEFAULT_OUTPUT);
 
     if output > Output::Normal {
@@ -112,7 +141,7 @@ pub fn run() -> Result<bool, Box<dyn Error>> {
     }
 
     let bitness = or!(binary.bitness(), WrongArch);
-    let segments = binary.segments();
+    let segments = binary.into_segments();
     test!(segments.is_empty(), NoText);
 
     if output > Output::Normal {
@@ -120,12 +149,8 @@ pub fn run() -> Result<bool, Box<dyn Error>> {
         segments.iter().for_each(print::segment);
     }
 
-    use Mode::*;
-    match mode {
-        Detect => run_detect(file, bitness, segments, output),
-        Stats => run_stats(file, bitness, segments, output),
-        Details => run_details(file, bitness, segments, output),
-    }?;
+    let mode = config.mode().unwrap_or(DEFAULT_MODE);
+    App::new(file, bitness, segments, output).run(mode)?;
 
     Ok(false)
 }
