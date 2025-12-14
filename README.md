@@ -6,16 +6,16 @@ A small CLI tool to detect CPU flags (instruction sets) of X86 binaries.
 
     $ bin-cpuflags-x86 [<option>...] <file>
 
-| Option             | Description                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| `--mode <mode>`    | Select mode of operation: `detect`, `stats` or `details`. Default value is `detect`. |
-| `-s`, `--stats`    | Alias for `--mode stats`. Count instructions used in every feature set.              |
-| `-d`, `--details`  | Alias for `--mode details`. List instructions used in every feature set.             |
-| `--output <level>` | Select output level: `normal`, `quiet` or `verbose`. Default value is `normal`.      |
-| `-q`, `--quiet`    | Alias for `--output quiet`. Print only the result data.                              |
-| `-v`, `--verbose`  | Alias for `--output verbose`. Enable more verbose output.                            |
-| `-h`, `--help`     | Display help message and exit.                                                       |
-| `--`               | Stop reading any options and treat the next argument as a file path.                 |
+| Option             | Description                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| `--mode <mode>`    | Select mode of operation: `detect`, `stats` or `details`. Default value is `detect`.        |
+| `-s`, `--stats`    | Alias for `--mode stats`. Show info about feature sets usage.                               |
+| `-d`, `--details`  | Alias for `--mode details`. Show info about feature sets, instructions and registers usage. |
+| `--output <level>` | Select output level: `normal`, `quiet` or `verbose`. Default value is `normal`.             |
+| `-q`, `--quiet`    | Alias for `--output quiet`. Print only the result data.                                     |
+| `-v`, `--verbose`  | Alias for `--output verbose`. Enable more verbose output.                                   |
+| `-h`, `--help`     | Display help message and exit.                                                              |
+| `--`               | Stop reading any options and treat the next argument as a file path.                        |
 
 ## Download
 
