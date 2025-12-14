@@ -1,9 +1,10 @@
 use crate::binary::{Binary, Segment};
-use crate::cli::{Mode, Output};
+use crate::cli::{self, Mode, Output};
 use crate::decoder::{Item, Task, TaskCount, TaskDetail};
 use crate::io::File;
 use crate::print;
 use crate::types::Arr;
+use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::Result as IoResult;
@@ -29,19 +30,6 @@ impl Display for AppError {
             NoText => write!(f, "No 'text' sections found in the file"),
         }
     }
-}
-
-macro_rules! or {
-    ($o: expr, $e: expr $(,)?) => {{
-        use AppError::*;
-        ($o).ok_or($e)?
-    }};
-}
-
-macro_rules! test {
-    ($b: expr, $e: expr $(,)?) => {
-        or!((!$b).then_some(()), $e)
-    };
 }
 
 struct App {
@@ -116,8 +104,21 @@ impl App {
     }
 }
 
+macro_rules! or {
+    ($o: expr, $e: expr $(,)?) => {{
+        use AppError::*;
+        ($o).ok_or($e)?
+    }};
+}
+
+macro_rules! test {
+    ($b: expr, $e: expr $(,)?) => {
+        or!((!$b).then_some(()), $e)
+    };
+}
+
 pub fn run() -> Result<bool, Box<dyn Error>> {
-    let Some(config) = crate::cli::read_args(std::env::args().skip(1))? else {
+    let Some(config) = cli::read_args(env::args().skip(1))? else {
         return Ok(true);
     };
 

@@ -2,7 +2,7 @@ use crate::binary::Segment;
 use crate::decoder::{Decoder, Task};
 use std::fmt::Arguments;
 use std::fs::File as FsFile;
-use std::io::{BufRead, BufReader, Result as IoResult, Seek, SeekFrom, StdoutLock, Write};
+use std::io::{self, BufRead, BufReader, Result as IoResult, Seek, SeekFrom, StdoutLock, Write};
 
 pub struct File {
     file: FsFile,
@@ -44,7 +44,7 @@ pub struct Stdout<'a> {
 
 impl<'a> Stdout<'a> {
     pub fn new() -> Self {
-        Self { lock: std::io::stdout().lock() }
+        Self { lock: io::stdout().lock() }
     }
 
     pub fn write_fmt(&mut self, args: Arguments<'_>) -> IoResult<()> {

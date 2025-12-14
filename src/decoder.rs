@@ -179,8 +179,8 @@ impl Task for TaskCount {
             return;
         }
 
-        for id in instruction.cpuid_features() {
-            self.features[*id as usize] += 1;
+        for feature in instruction.cpuid_features() {
+            self.features[*feature as usize] += 1;
         }
     }
 
@@ -210,15 +210,15 @@ impl Task for TaskDetail {
 
         let mnemonic = instruction.mnemonic() as usize;
 
-        for id in instruction.cpuid_features() {
-            self.features[*id as usize].add(mnemonic);
+        for feature in instruction.cpuid_features() {
+            self.features[*feature as usize].add(mnemonic);
         }
 
         for op in 0..4 {
-            let register = instruction.op_register(op) as usize;
+            let id = instruction.op_register(op) as usize;
 
-            if register > 0 {
-                self.registers[register] += 1;
+            if id > 0 {
+                self.registers[id] += 1;
             }
         }
     }

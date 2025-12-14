@@ -1,11 +1,12 @@
 use crate::binary::{Binary, Segment};
 use crate::decoder::{Count, Detail, Feature, Item};
 use crate::io::Stdout;
+use std::env;
 use std::error::Error;
 use std::io::Result as IoResult;
 
 pub fn help() {
-    let bin = std::env::current_exe().ok();
+    let bin = env::current_exe().ok();
     println!(
         include_str!("help.in"),
         PKG = env!("CARGO_PKG_NAME"),
