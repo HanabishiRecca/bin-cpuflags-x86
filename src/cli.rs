@@ -63,14 +63,14 @@ impl Display for CliError {
     }
 }
 
-macro_rules! E {
+macro_rules! err {
     ($e: expr) => {{
         use CliError::*;
         return Err($e);
     }};
 }
 
-macro_rules! F {
+macro_rules! from {
     ($s: expr) => {
         From::from($s.as_ref())
     };
@@ -86,7 +86,7 @@ pub fn read_args(
         let arg = arg.as_ref();
 
         if escape {
-            config.file_path = Some(F!(arg));
+            config.file_path = Some(from!(arg));
             break;
         }
 
@@ -95,7 +95,7 @@ pub fn read_args(
         }
 
         if !arg.starts_with('-') {
-            config.file_path = Some(F!(arg));
+            config.file_path = Some(from!(arg));
             continue;
         }
 
@@ -103,7 +103,7 @@ pub fn read_args(
             () => {
                 match args.next() {
                     Some(value) => value,
-                    _ => E!(NoValue(F!(arg))),
+                    _ => err!(NoValue(from!(arg))),
                 }
             };
         }
@@ -116,7 +116,7 @@ pub fn read_args(
                     "detect" => Detect,
                     "stats" => Stats,
                     "details" => Details,
-                    _ => E!(InvalidValue(F!(arg), F!(value))),
+                    _ => err!(InvalidValue(from!(arg), from!(value))),
                 });
             }
             "-s" | "--stats" => {
@@ -133,7 +133,7 @@ pub fn read_args(
                     "quiet" => Quiet,
                     "normal" => Normal,
                     "verbose" => Verbose,
-                    _ => E!(InvalidValue(F!(arg), F!(value))),
+                    _ => err!(InvalidValue(from!(arg), from!(value))),
                 });
             }
             "-v" | "--verbose" => {
@@ -149,7 +149,7 @@ pub fn read_args(
                 escape = true;
             }
 
-            _ => E!(Unknown(F!(arg))),
+            _ => err!(Unknown(from!(arg))),
         }
     }
 

@@ -1,9 +1,9 @@
 use crate::types::{Arr, Str};
 use object::{
-    Architecture, BinaryFormat, File, Object, ObjectSection, ReadCache, ReadRef,
+    Architecture, BinaryFormat, File as ObjFile, Object, ObjectSection, ReadCache, ReadRef,
     Result as ObjResult, Section, SectionKind,
 };
-use std::fs::File as FsFile;
+use std::fs::File;
 
 pub struct Segment {
     name: Option<Str>,
@@ -47,9 +47,9 @@ impl Binary {
         Self { format, architecture, segments }
     }
 
-    pub fn parse(file: &FsFile) -> ObjResult<Self> {
+    pub fn parse(file: &File) -> ObjResult<Self> {
         let cache = ReadCache::new(file);
-        let binary = File::parse(&cache)?;
+        let binary = ObjFile::parse(&cache)?;
         let segments = binary.sections().filter_map(map_segment).collect();
         Ok(Self::new(binary.format(), binary.architecture(), segments))
     }
@@ -71,7 +71,7 @@ impl Binary {
         }
     }
 
-    pub fn into_segments(self) -> Arr<Segment> {
-        self.segments
+    pub fn into_segments(self) -> Option<Arr<Segment>> {
+        (!self.segments.is_empty()).then_some(self.segments)
     }
 }

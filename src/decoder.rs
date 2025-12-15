@@ -7,9 +7,9 @@ use std::{cmp::Reverse, marker::PhantomData};
 /// Keep in sync with `IcedConstants::CPUID_FEATURE_ENUM_COUNT`!
 const FEATURE_COUNT: usize = 178;
 /// Keep in sync with `IcedConstants::MNEMONIC_ENUM_COUNT`!
-const MNEMONIC_ENUM_COUNT: usize = 1894;
+const MNEMONIC_COUNT: usize = 1894;
 /// Keep in sync with `IcedConstants::REGISTER_ENUM_COUNT`!
-const REGISTER_ENUM_COUNT: usize = 256;
+const REGISTER_COUNT: usize = 256;
 
 const OPTIONS: u32 = DecoderOptions::NO_INVALID_CHECK;
 
@@ -19,7 +19,7 @@ pub trait Item: Sized {
     fn sort(&mut self) {}
 
     fn sort_list(items: &mut [Self]) {
-        items.sort_unstable_by_key(|counter| Reverse(counter.count()));
+        items.sort_unstable_by_key(|item| Reverse(item.count()));
         items.iter_mut().for_each(Self::sort);
     }
 }
@@ -100,7 +100,7 @@ struct DetailCounter {
 
 impl DetailCounter {
     fn new(_: usize) -> Self {
-        Self { count: 0, mnemonics: Arr::from(vec![0; MNEMONIC_ENUM_COUNT]) }
+        Self { count: 0, mnemonics: Arr::from(vec![0; MNEMONIC_COUNT]) }
     }
 
     fn add(&mut self, mnemonic: usize) {
@@ -118,8 +118,7 @@ impl DetailCounter {
 }
 
 pub struct Detail {
-    id: usize,
-    count: u64,
+    count: Count<Feature>,
     mnemonics: Arr<Count<Mnemonic>>,
 }
 
@@ -131,11 +130,11 @@ impl Detail {
 
 impl Item for Detail {
     fn name(&self) -> &'static str {
-        strings::FEATURE[self.id]
+        self.count.name()
     }
 
     fn count(&self) -> u64 {
-        self.count
+        self.count.count()
     }
 
     fn sort(&mut self) {
@@ -144,14 +143,14 @@ impl Item for Detail {
 }
 
 impl Map<DetailCounter> for Detail {
-    fn filter((_, feature): &(usize, DetailCounter)) -> bool {
-        feature.count() > 0
+    fn filter((_, detail): &(usize, DetailCounter)) -> bool {
+        detail.count() > 0
     }
 
-    fn map((id, feature): (usize, DetailCounter)) -> Self {
-        let count = feature.count();
-        let mnemonics = Count::map_items(feature.into_mnemonics());
-        Self { id, count, mnemonics }
+    fn map((id, detail): (usize, DetailCounter)) -> Self {
+        let count = Count::map((id, detail.count()));
+        let mnemonics = Count::map_items(detail.into_mnemonics());
+        Self { count, mnemonics }
     }
 }
 
@@ -199,7 +198,7 @@ impl Task for TaskDetail {
 
     fn new() -> Self {
         let features = (0..FEATURE_COUNT).map(DetailCounter::new).collect();
-        let registers = Arr::from(vec![0; REGISTER_ENUM_COUNT]);
+        let registers = Arr::from(vec![0; REGISTER_COUNT]);
         Self { features, registers }
     }
 

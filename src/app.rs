@@ -1,8 +1,8 @@
 use crate::binary::{Binary, Segment};
 use crate::cli::{self, Mode, Output};
 use crate::decoder::{Item, Task, TaskCount, TaskDetail};
-use crate::io::File;
 use crate::print;
+use crate::reader::Reader;
 use crate::types::Arr;
 use std::env;
 use std::error::Error;
@@ -33,19 +33,19 @@ impl Display for AppError {
 }
 
 struct App {
-    file: File,
+    reader: Reader,
     bitness: u32,
     segments: Arr<Segment>,
     output: Output,
 }
 
 impl App {
-    fn new(file: File, bitness: u32, segments: Arr<Segment>, output: Output) -> Self {
-        Self { file, bitness, segments, output }
+    fn new(reader: Reader, bitness: u32, segments: Arr<Segment>, output: Output) -> Self {
+        Self { reader, bitness, segments, output }
     }
 
     fn exec<T: Task>(&self, task: T) -> IoResult<T::Result> {
-        self.file.decode(task, self.bitness, &self.segments)
+        self.reader.read(task, self.bitness, &self.segments)
     }
 
     #[inline(never)]
@@ -104,46 +104,40 @@ impl App {
     }
 }
 
-macro_rules! or {
+macro_rules! ok {
+    ($o: expr $(,)?) => {
+        match $o {
+            Some(value) => value,
+            _ => return Ok(true),
+        }
+    };
+}
+
+macro_rules! err {
     ($o: expr, $e: expr $(,)?) => {{
         use AppError::*;
         ($o).ok_or($e)?
     }};
 }
 
-macro_rules! test {
-    ($b: expr, $e: expr $(,)?) => {
-        or!((!$b).then_some(()), $e)
-    };
-}
-
 pub fn run() -> Result<bool, Box<dyn Error>> {
-    let Some(config) = cli::read_args(env::args().skip(1))? else {
-        return Ok(true);
-    };
-
-    let Some(file_path) = config.file_path() else {
-        return Ok(true);
-    };
-
+    let config = ok!(cli::read_args(env::args().skip(1))?);
+    let file_path = ok!(config.file_path());
     let output = config.output().unwrap_or(DEFAULT_OUTPUT);
 
     if output > Output::Normal {
         print::file_path(file_path);
     }
 
-    let file = File::open(file_path)?;
-    test!(file.is_dir()?, WrongTarget);
-
-    let binary = Binary::parse(file.fs_file())?;
+    let reader = err!(Reader::open(file_path)?, WrongTarget);
+    let binary = Binary::parse(reader.file())?;
 
     if output > Output::Quiet {
         print::binary(&binary);
     }
 
-    let bitness = or!(binary.bitness(), WrongArch);
-    let segments = binary.into_segments();
-    test!(segments.is_empty(), NoText);
+    let bitness = err!(binary.bitness(), WrongArch);
+    let segments = err!(binary.into_segments(), NoText);
 
     if output > Output::Normal {
         println!("Text sections:");
@@ -151,7 +145,7 @@ pub fn run() -> Result<bool, Box<dyn Error>> {
     }
 
     let mode = config.mode().unwrap_or(DEFAULT_MODE);
-    App::new(file, bitness, segments, output).run(mode)?;
+    App::new(reader, bitness, segments, output).run(mode)?;
 
     Ok(false)
 }

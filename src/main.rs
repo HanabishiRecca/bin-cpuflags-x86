@@ -2,8 +2,8 @@ mod app;
 mod binary;
 mod cli;
 mod decoder;
-mod io;
 mod print;
+mod reader;
 mod types;
 
 use std::process::ExitCode;
