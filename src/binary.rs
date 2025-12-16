@@ -1,3 +1,5 @@
+mod strings;
+
 use crate::types::{Arr, Str};
 use object::{
     Architecture, BinaryFormat, File as ObjFile, Object, ObjectSection, ReadCache, ReadRef,
@@ -54,12 +56,12 @@ impl Binary {
         Ok(Self::new(binary.format(), binary.architecture(), segments))
     }
 
-    pub fn format(&self) -> BinaryFormat {
-        self.format
+    pub fn format(&self) -> &'static str {
+        strings::FORMAT[self.format as usize]
     }
 
-    pub fn architecture(&self) -> Architecture {
-        self.architecture
+    pub fn architecture(&self) -> &'static str {
+        strings::ARCHITECTURE[self.architecture as usize]
     }
 
     pub fn bitness(&self) -> Option<u32> {

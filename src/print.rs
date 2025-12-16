@@ -23,8 +23,8 @@ pub fn file_path(path: &str) {
 }
 
 pub fn binary(binary: &Binary) {
-    println!("Format: {:?}", binary.format());
-    println!("Architecture: {:?}", binary.architecture());
+    println!("Format: {}", binary.format());
+    println!("Architecture: {}", binary.architecture());
 }
 
 pub fn segment(segment: &Segment) {
