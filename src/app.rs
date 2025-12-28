@@ -36,62 +36,37 @@ struct App {
     reader: Reader,
     bitness: u32,
     segments: Arr<Segment>,
-    output: Output,
 }
 
 impl App {
-    fn new(reader: Reader, bitness: u32, segments: Arr<Segment>, output: Output) -> Self {
-        Self { reader, bitness, segments, output }
+    fn new(reader: Reader, bitness: u32, segments: Arr<Segment>) -> Self {
+        Self { reader, bitness, segments }
     }
 
     fn exec<T: Task>(&self, task: T) -> IoResult<T::Result> {
         self.reader.read(task, self.bitness, &self.segments)
     }
 
-    #[inline(never)]
     fn detect(&self) -> IoResult<()> {
         let features = self.exec(TaskCount::new())?;
-
-        if self.output > Output::Quiet {
-            print::cpuid(&features);
-            print!("Features: ");
-        }
-
-        print::features(&features)
+        print::features(&features);
+        Ok(())
     }
 
-    #[inline(never)]
     fn stats(&self) -> IoResult<()> {
         let mut stats = self.exec(TaskCount::new())?;
         Item::sort_list(&mut stats);
-
-        if self.output > Output::Quiet {
-            println!();
-            print::stats_note();
-        }
-
-        print::stats(&stats)
+        print::stats(&stats);
+        Ok(())
     }
 
-    #[inline(never)]
     fn details(&self) -> IoResult<()> {
         let (mut details, mut registers) = self.exec(TaskDetail::new())?;
         Item::sort_list(&mut details);
         Item::sort_list(&mut registers);
-
-        if self.output > Output::Quiet {
-            println!();
-            print::header("Instructions");
-            print::stats_note();
-        }
-
-        print::details(&details)?;
-
-        if self.output > Output::Quiet {
-            print::header("Registers");
-        }
-
-        print::stats(&registers)
+        print::details(&details);
+        print::registers(&registers);
+        Ok(())
     }
 
     fn run(&self, mode: Mode) -> IoResult<()> {
@@ -122,30 +97,21 @@ macro_rules! err {
 
 pub fn run() -> Result<bool, Box<dyn Error>> {
     let config = ok!(cli::read_args(env::args().skip(1))?);
-    let file_path = ok!(config.file_path());
-    let output = config.output().unwrap_or(DEFAULT_OUTPUT);
+    print::set_output(config.output().unwrap_or(DEFAULT_OUTPUT));
 
-    if output > Output::Normal {
-        print::file_path(file_path);
-    }
+    let file_path = ok!(config.file_path());
+    print::file_path(file_path);
 
     let reader = err!(Reader::open(file_path)?, WrongTarget);
     let binary = Binary::parse(reader.file())?;
-
-    if output > Output::Quiet {
-        print::binary(&binary);
-    }
+    print::binary(&binary);
 
     let bitness = err!(binary.bitness(), WrongArch);
     let segments = err!(binary.into_segments(), NoText);
-
-    if output > Output::Normal {
-        println!("Text sections:");
-        segments.iter().for_each(print::segment);
-    }
+    print::segments(&segments);
 
     let mode = config.mode().unwrap_or(DEFAULT_MODE);
-    App::new(reader, bitness, segments, output).run(mode)?;
+    App::new(reader, bitness, segments).run(mode)?;
 
     Ok(false)
 }
