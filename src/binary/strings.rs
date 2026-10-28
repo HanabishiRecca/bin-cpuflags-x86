@@ -7,7 +7,7 @@ pub static FORMAT: [&str; 6] = [
     "XCOFF",
 ];
 
-pub static ARCHITECTURE: [&str; 36] = [
+pub static ARCHITECTURE: [&str; 37] = [
     "",
     "AArch64",
     "AArch64 (ILP32 ABI)",
@@ -23,6 +23,7 @@ pub static ARCHITECTURE: [&str; 36] = [
     "x86-64 (x32 ABI)",
     "Hexagon",
     "PA-RISC",
+    "IA-64",
     "LoongArch 32-bit",
     "LoongArch 64-bit",
     "Motorola 68000",
