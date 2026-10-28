@@ -3,7 +3,7 @@ protocol = "sparse"
 
 [profile.release]
 panic = "abort"
-opt-level = 2
+opt-level = 3
 strip = true
 lto = true
 codegen-units = 1
