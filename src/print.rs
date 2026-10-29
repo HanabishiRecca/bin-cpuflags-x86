@@ -85,7 +85,7 @@ fn feature(feature: &Count<Feature>) {
 pub fn features(features: &[Count<Feature>]) {
     if output!(Normal) {
         if features.iter().any(Count::is_cpuid) {
-            println!("Warning: CPUID usage detected, features could switch in runtime.");
+            println!("Warning: CPUID usage detected, this program can switch features at runtime.");
         }
 
         print!("Features: ");
